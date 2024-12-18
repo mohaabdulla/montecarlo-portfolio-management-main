@@ -181,12 +181,9 @@ def main():
                     covariance_matrix,
                     risk_free_rate=risk_free_rate
                 )
-                if balanced:
-                    weights = optimizer.monte_carlo_weight_optimization()
-                    st.subheader('Monte Carlo Optimized Portfolio Weights (Max 20% per stock):')
-                else:
-                    weights = optimizer.monte_carlo_weight_optimization()
-                    st.subheader('Monte Carlo Optimized Portfolio Weights (Max 20% per stock):')
+                weights, sharpe = optimizer.optimize_weights(num_simulations=10000)
+                st.write(f"Optimized Portfolio Sharpe Ratio: {sharpe:.4f}")
+                st.subheader('Optimized Portfolio Weights:')
                 display_optimal_weights(tickers, weights, streamlit_display=True)
             else:
                 st.subheader('Using Custom Weights:')

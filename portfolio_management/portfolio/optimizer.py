@@ -53,24 +53,45 @@ class PortfolioOptimizer:
     def _portfolio_volatility(weights, covariance_matrix):
         return np.sqrt(np.dot(weights.T, np.dot(covariance_matrix, weights)))
 
+import numpy as np
+
 class PortfolioOptimizer:
-    def monte_carlo_weight_optimization(self, num_simulations=10000):
+    def __init__(self, expected_returns, covariance_matrix, risk_free_rate=0.0):
+        self.expected_returns = expected_returns
+        self.covariance_matrix = covariance_matrix
+        self.risk_free_rate = risk_free_rate
+
+    def optimize_weights(self, num_simulations=10000):
         num_assets = len(self.expected_returns)
-        best_sharpe = -float('inf')
+        best_sharpe = -np.inf
         optimal_weights = None
         
+        # Track performance metrics for each simulation
+        all_returns = []
+        all_volatilities = []
+        all_weights = []
+        
         for _ in range(num_simulations):
-            # Generate random weights with 20% cap
+            # Generate random weights
             weights = np.random.random(num_assets)
-            weights = np.minimum(weights, 0.20)  # Apply 20% cap
-            weights = weights / weights.sum()  # Normalize to sum to 1
+            # Apply 20% cap constraint
+            weights = np.minimum(weights, 0.20)
+            # Normalize to sum to 1
+            weights = weights / weights.sum()
             
+            # Calculate portfolio metrics
             portfolio_return = np.sum(self.expected_returns * weights)
             portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(self.covariance_matrix, weights)))
             sharpe_ratio = (portfolio_return - self.risk_free_rate) / portfolio_volatility
             
+            # Store results
+            all_returns.append(portfolio_return)
+            all_volatilities.append(portfolio_volatility)
+            all_weights.append(weights)
+            
+            # Update best portfolio
             if sharpe_ratio > best_sharpe:
                 best_sharpe = sharpe_ratio
                 optimal_weights = weights
-                
-        return optimal_weights
+
+        return optimal_weights, best_sharpe
