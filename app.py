@@ -182,11 +182,11 @@ def main():
                     risk_free_rate=risk_free_rate
                 )
                 if balanced:
-                    weights = optimizer.minimize_volatility(target_return=expected_returns.mean())
-                    st.subheader('Optimal Balanced Portfolio Weights:')
+                    weights = optimizer.monte_carlo_weight_optimization()
+                    st.subheader('Monte Carlo Optimized Portfolio Weights (Max 20% per stock):')
                 else:
-                    weights = optimizer.maximize_sharpe_ratio()
-                    st.subheader('Optimal Portfolio Weights to Maximize Sharpe Ratio:')
+                    weights = optimizer.monte_carlo_weight_optimization()
+                    st.subheader('Monte Carlo Optimized Portfolio Weights (Max 20% per stock):')
                 display_optimal_weights(tickers, weights, streamlit_display=True)
             else:
                 st.subheader('Using Custom Weights:')
@@ -216,3 +216,17 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# After weight optimization:
+sector_data = data_loader.get_sector_data(tickers)
+sector_weights = {}
+for ticker, weight in zip(tickers, weights):
+    sector = sector_data[ticker]
+    sector_weights[sector] = sector_weights.get(sector, 0) + weight
+
+st.subheader('Sector Allocation:')
+sector_df = pd.DataFrame({
+    'Sector': sector_weights.keys(),
+    'Weight': sector_weights.values()
+})
+st.dataframe(sector_df)

@@ -19,7 +19,17 @@ class DataLoader:
 if __name__ == "__main__":
     data_loader: DataLoader = DataLoader()
     tickers: List[str] = ['AAPL', 'MSFT', 'GOOG']
-    start_date: str = '2020-01-01'
+    start_date: str = '2016-01-01'
     end_date: str = '2023-01-01'
     stock_data: pd.DataFrame = data_loader.load_data(tickers, start_date, end_date)
     print(stock_data.head())
+
+def get_sector_data(self, tickers):
+    sector_data = {}
+    for ticker in tickers:
+        try:
+            stock = yf.Ticker(ticker)
+            sector_data[ticker] = stock.info.get('sector', 'Unknown')
+        except:
+            sector_data[ticker] = 'Unknown'
+    return sector_data

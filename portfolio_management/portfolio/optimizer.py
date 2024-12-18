@@ -52,3 +52,25 @@ class PortfolioOptimizer:
     @staticmethod
     def _portfolio_volatility(weights, covariance_matrix):
         return np.sqrt(np.dot(weights.T, np.dot(covariance_matrix, weights)))
+
+class PortfolioOptimizer:
+    def monte_carlo_weight_optimization(self, num_simulations=10000):
+        num_assets = len(self.expected_returns)
+        best_sharpe = -float('inf')
+        optimal_weights = None
+        
+        for _ in range(num_simulations):
+            # Generate random weights with 20% cap
+            weights = np.random.random(num_assets)
+            weights = np.minimum(weights, 0.20)  # Apply 20% cap
+            weights = weights / weights.sum()  # Normalize to sum to 1
+            
+            portfolio_return = np.sum(self.expected_returns * weights)
+            portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(self.covariance_matrix, weights)))
+            sharpe_ratio = (portfolio_return - self.risk_free_rate) / portfolio_volatility
+            
+            if sharpe_ratio > best_sharpe:
+                best_sharpe = sharpe_ratio
+                optimal_weights = weights
+                
+        return optimal_weights
