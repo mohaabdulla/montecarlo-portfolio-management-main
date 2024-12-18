@@ -200,7 +200,7 @@ def main():
             int(num_simulations), int(time_horizon)
         )
 
-        # Analyze Results
+        # Display Results
         st.header('4. Simulation Results')
         st.subheader('Monte Carlo Simulation Insights:')
         insights = get_simulation_insights(final_portfolio_values, initial_investment)
