@@ -23,7 +23,7 @@ load_dotenv()
 def main():
     st.title('Portfolio Management with Monte Carlo Simulation')
 
-    st.write("""
+    st.write(""" 
         Welcome to the Portfolio Management Application. Define your investment preferences and utilize Monte Carlo simulations to project and analyze potential portfolio performance.
         """)
 
@@ -141,7 +141,6 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 
 if 'tickers' in locals() and 'weights' in locals():
     from portfolio_management.data.data_loader import DataLoader
