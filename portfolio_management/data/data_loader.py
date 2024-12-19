@@ -15,6 +15,18 @@ class DataLoader:
             except Exception as e:
                 print(f"Error loading data for {ticker}: {e}")
         return pd.DataFrame(stock_data)
+    
+    def get_sector_data(self, tickers: List[str]) -> Dict[str, str]:
+        """Fetches sector data for a list of stock tickers using Yahoo Finance."""
+        sector_data = {}
+        for ticker in tickers:
+            try:
+                stock = yf.Ticker(ticker)
+                sector_data[ticker] = stock.info.get('sector', 'Unknown')
+            except Exception as e:
+                print(f"Error fetching sector data for {ticker}: {e}")
+                sector_data[ticker] = 'Unknown'
+        return sector_data
 
 if __name__ == "__main__":
     data_loader: DataLoader = DataLoader()
@@ -24,12 +36,3 @@ if __name__ == "__main__":
     stock_data: pd.DataFrame = data_loader.load_data(tickers, start_date, end_date)
     print(stock_data.head())
 
-def get_sector_data(self, tickers):
-    sector_data = {}
-    for ticker in tickers:
-        try:
-            stock = yf.Ticker(ticker)
-            sector_data[ticker] = stock.info.get('sector', 'Unknown')
-        except:
-            sector_data[ticker] = 'Unknown'
-    return sector_data
