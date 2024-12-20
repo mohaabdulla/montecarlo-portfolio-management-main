@@ -117,7 +117,8 @@ def main():
         if stock_data.empty:
             st.error('Failed to load stock data. Please check the tickers and date range.')
             return
-
+        st.write("Loaded data shape:", stock_data.shape)
+        st.write("Loaded data head:", stock_data.head())
         portfolio = Portfolio(stock_data)
         portfolio.calculate_returns()
         expected_returns = portfolio.returns.mean() * 252

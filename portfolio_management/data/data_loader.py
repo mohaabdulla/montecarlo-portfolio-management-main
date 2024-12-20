@@ -3,26 +3,25 @@ import yfinance as yf
 from typing import List, Dict, Union
 
 class DataLoader:
-    def load_data(self, tickers: List[str], start_date: Union[str, pd.Timestamp], end_date: Union[str, pd.Timestamp]) -> pd.DataFrame:
-        stock_data: Dict[str, pd.Series] = {}
-        for ticker in tickers:
-            try:
-                # Download stock data from Yahoo Finance
-                data: pd.DataFrame = yf.download(ticker, start=start_date, end=end_date, progress=False)
-                print(f"Downloaded data for {ticker}: {data.head()}")  # Debug print
-                if not data.empty:
-                    stock_data[ticker] = data['Adj Close'].tolist()  # Store the adjusted close prices as lists
-                else:
-                    print(f"No data found for {ticker}")
-            except Exception as e:
-                print(f"Error loading data for {ticker}: {e}")
+   def load_data(self, tickers: List[str], start_date: Union[str, pd.Timestamp], end_date: Union[str, pd.Timestamp]) -> pd.DataFrame:
+    stock_data: Dict[str, pd.Series] = {}
+    for ticker in tickers:
+        try:
+            # Download stock data from Yahoo Finance
+            data: pd.DataFrame = yf.download(ticker, start=start_date, end=end_date, progress=False)
+            if not data.empty:
+                stock_data[ticker] = data['Adj Close']  # Store the adjusted close prices as Series
+            else:
+                print(f"No data found for {ticker}")
+        except Exception as e:
+            print(f"Error loading data for {ticker}: {e}")
 
-        if stock_data:
-            return pd.DataFrame(stock_data)
-        else:
-            return pd.DataFrame()  # Return an empty DataFrame if no data is found
+    if stock_data:
+        return pd.DataFrame(stock_data)
+    else:
+        return pd.DataFrame()
 
-    
+
     def get_sector_data(self, tickers: List[str]) -> Dict[str, str]:
         """Fetches sector data for a list of stock tickers using Yahoo Finance."""
         sector_data = {}
