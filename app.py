@@ -143,9 +143,7 @@ def main():
             st.error('Failed to load stock data. Please check the tickers and date range.')
             return
 
-        if stock_data.isnull().values.any():
-            st.error("The stock data contains missing values. Please check your data.")
-            return
+       
 
         if (stock_data <= 0).values.any():
             st.error("Stock data contains zero or negative values, which is invalid.")
