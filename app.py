@@ -117,11 +117,7 @@ def main():
             )
             custom_weights[ticker] = weight
 
-        # Validate that weights sum to 1
-        total_weight = sum(custom_weights.values())
-        if abs(total_weight - 1.0) > 0.0001:
-            st.error(f"Total weights must sum to 1. Currently summing to {total_weight:.2f}. Please adjust.")
-            st.stop()
+      
         
         weights = [custom_weights[ticker] for ticker in selected_tickers]
     elif weighting_method == "Equal Weights":
@@ -187,14 +183,6 @@ def main():
             except ValueError as e:
                 st.error(f"Optimization failed: {e}")
                 return
-
-        # Display the weights for each stock
-        st.subheader('Portfolio Weights:')
-        weight_df = pd.DataFrame({
-            'Ticker': tickers,
-            'Weight': weights
-        })
-        st.dataframe(weight_df)
 
         # Run Monte Carlo simulation
         log_returns = np.log(stock_data / stock_data.shift(1)).dropna()  # Correct log returns
