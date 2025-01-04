@@ -168,19 +168,7 @@ def main():
 
         plot_interactive_simulation_results(all_cumulative_returns, final_portfolio_values, end_date)
 
-        # Sector allocation
-        sector_data = data_loader.get_sector_data(tickers)
-        sector_weights = {}
-        for ticker, weight in zip(tickers, weights):
-            sector = sector_data.get(ticker, 'Unknown')  # Safe access for missing data
-            sector_weights[sector] = sector_weights.get(sector, 0) + weight
-
-        st.subheader('Sector Allocation:')
-        sector_df = pd.DataFrame({
-            'Sector': list(sector_weights.keys()),
-            'Weight': list(sector_weights.values())
-        })
-        st.dataframe(sector_df)
+       
 
 if __name__ == '__main__':
     main()
