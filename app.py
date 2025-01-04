@@ -97,7 +97,37 @@ def main():
         help='The risk-free rate used for calculations, typically a treasury bond yield.'
     )
 
-    optimize = st.checkbox('Optimize Portfolio', value=False, help='Select to optimize portfolio weights.')
+    # Weighting method selection
+    weighting_method = st.radio(
+        "Choose weighting method:",
+        ("Equal Weights", "Optimize Portfolio", "Custom Weights")
+    )
+
+    weights = None
+    if weighting_method == "Custom Weights":
+        st.subheader("Enter Custom Weights for Each Stock")
+        custom_weights = {}
+        for ticker in selected_tickers:
+            weight = st.number_input(
+                f"Weight for {ticker}:",
+                min_value=0.0,
+                max_value=1.0,
+                value=1.0 / len(selected_tickers),
+                step=0.01
+            )
+            custom_weights[ticker] = weight
+
+        # Validate that weights sum to 1
+        total_weight = sum(custom_weights.values())
+        if abs(total_weight - 1.0) > 0.0001:
+            st.error(f"Total weights must sum to 1. Currently summing to {total_weight:.2f}. Please adjust.")
+            st.stop()
+        
+        weights = [custom_weights[ticker] for ticker in selected_tickers]
+    elif weighting_method == "Equal Weights":
+        weights = [1.0 / len(tickers)] * len(tickers)
+    else:  # Optimize Portfolio
+        optimize = True
 
     initial_investment = st.number_input(
         'Initial Investment ($):',
@@ -146,7 +176,7 @@ def main():
         covariance_matrix = portfolio.returns.cov() * 252
 
         # Optimization
-        if optimize:
+        if weighting_method == "Optimize Portfolio":
             optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate, min_weight=0.01)
             target_return = expected_returns.mean()
             st.write(f"Target Return: {target_return:.4f}")
@@ -157,8 +187,6 @@ def main():
             except ValueError as e:
                 st.error(f"Optimization failed: {e}")
                 return
-        else:
-            weights = [1.0 / len(tickers)] * len(tickers)  # Equal weights
 
         # Run Monte Carlo simulation
         log_returns = np.log(stock_data / stock_data.shift(1)).dropna()  # Correct log returns
