@@ -23,7 +23,7 @@ load_dotenv()
 def main():
     st.title('Portfolio Management with Monte Carlo Simulation')
 
-    st.write("""
+    st.write(""" 
         Welcome to the Portfolio Management Application. Define your investment preferences and utilize Monte Carlo simulations to project and analyze potential portfolio performance.
         """)
 
@@ -71,7 +71,30 @@ def main():
     weights = None
     initial_investment = 1000.0  # Default value
 
-    optimize = st.write('Optimize Portfolio')
+    # Add this in the Investment Preferences section
+    weighting_method = st.radio(
+        "Choose weighting method:",
+        ("Optimize Portfolio", "Custom Weights", "Equal Weights")
+    )
+
+    if weighting_method == "Custom Weights":
+        custom_weights = {}
+        st.write("Enter custom weights (must sum to 1.0)")
+        
+        # Create input fields for each selected ticker
+        for ticker in selected_tickers:
+            weight = st.number_input(
+                f"Weight for {ticker}:",
+                min_value=0.0,
+                max_value=1.0,
+                value=1.0/len(selected_tickers),
+                step=0.01
+            )
+            custom_weights[ticker] = weight
+        
+   
+        weights = [custom_weights[ticker] for ticker in selected_tickers]
+
     optimization_choice = st.selectbox(
         'Optimization Strategy',
         ('Maximize Sharpe Ratio', 'Balanced Portfolio'),
@@ -86,7 +109,6 @@ def main():
         min_value=0.0,
         help='Total amount you plan to invest.'
     )
-
     # Input: Simulation Parameters
     st.header('3. Simulation Parameters')
     col1, col2 = st.columns(2)
@@ -117,16 +139,26 @@ def main():
         if stock_data.empty:
             st.error('Failed to load stock data. Please check the tickers and date range.')
             return
-
+        st.write("Loaded data shape:", stock_data.shape)
+        st.write("Loaded data head:", stock_data.head())
         portfolio = Portfolio(stock_data)
         portfolio.calculate_returns()
         expected_returns = portfolio.returns.mean() * 252
         covariance_matrix = portfolio.returns.cov() * 252
 
-        optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate)
-        weights, sharpe = optimizer.optimize_weights(num_simulations=10000)
-        st.write(f"Optimized Portfolio Sharpe Ratio: {sharpe:.4f}")
-        display_optimal_weights(tickers, weights, streamlit_display=True)
+
+
+
+        if weighting_method == "Optimize Portfolio":
+            optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate)
+            weights, sharpe = optimizer.optimize_weights(num_simulations=10000)
+            st.write(f"Optimized Portfolio Sharpe Ratio: {sharpe:.4f}")
+            display_optimal_weights(tickers, weights, streamlit_display=True)
+        elif weighting_method == "Custom Weights":
+            # Use the custom weights directly
+            weights = [custom_weights[ticker] for ticker in tickers]
+        else:  # Equal Weights
+            weights = [1.0/len(tickers)] * len(tickers)
 
         simulation = MonteCarloSimulation(portfolio.returns, initial_investment, weights)
         all_cumulative_returns, final_portfolio_values = simulation.run_simulation(int(num_simulations), int(time_horizon))
@@ -141,7 +173,6 @@ def main():
 
 if __name__ == '__main__':
     main()
-
 
 if 'tickers' in locals() and 'weights' in locals():
     from portfolio_management.data.data_loader import DataLoader
