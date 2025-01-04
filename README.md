@@ -1,287 +1,105 @@
-# Portfolio Management with Monte Carlo Simulation
+# Monte Carlo Portfolio Optimization
 
-[![Python Version](https://img.shields.io/badge/python-3.7%2B-blue)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+## 📘 **Project Overview**
+This project leverages Monte Carlo simulations to optimize investment portfolio allocation. The system enables users to determine optimal sector weights, expected returns, and Value at Risk (VaR) for each investment. The project includes a user-friendly Graphical User Interface (GUI) to simplify data input, analysis, and decision-making.
 
----
+## 🚀 **Key Features**
+- **Monte Carlo Simulation**: Uses random sampling to generate thousands of portfolio weight combinations for optimal allocation.
+- **Automated Portfolio Analysis**: Automatically calculates key metrics like sector weights, expected returns, and VaR for each sector and ticker.
+- **User-Friendly GUI**: Provides a visual interface to input, update, and analyze portfolio data.
+- **Data Extraction and Analysis**: Extracts up to 10 years of historical data to analyze past performance.
+- **Customizable Inputs**: Users can input custom tickers, set risk tolerance, and define target returns.
 
-## Table of Contents
-
-- [Portfolio Management with Monte Carlo Simulation](#portfolio-management-with-monte-carlo-simulation)
-  - [Table of Contents](#table-of-contents)
-  - [Introduction](#introduction)
-  - [Features](#features)
-  - [Screenshots](#screenshots)
-  - [Project Structure](#project-structure)
-  - [Installation](#installation)
-    - [Prerequisites](#prerequisites)
-    - [Setup Instructions](#setup-instructions)
-  - [Usage](#usage)
-    - [Running the Application](#running-the-application)
-    - [Application Workflow](#application-workflow)
-  - [Testing](#testing)
-  - [Contributing](#contributing)
-  - [License](#license)
-  - [Contact](#contact)
-
----
-
-## Introduction
-
-**Portfolio Management with Monte Carlo Simulation** is a comprehensive Python application designed to assist investors and financial analysts in managing and optimizing investment portfolios. By leveraging Monte Carlo simulations and interactive visualizations, the application provides probabilistic forecasts of portfolio performance under various market conditions, aiding in risk assessment and strategic planning.
-
----
-
-## Features
-
-- **Interactive User Interface**: Streamlit-based UI with intuitive layout and interactive elements.
-- **Investment Input Options**:
-  - Input weights with an initial investment amount.
-  - **OR** specify the actual dollar amount for each stock.
-- **Editable Weights Table**: Adjust weights for each stock directly in an interactive table.
-- **Portfolio Optimization**: Choose to optimize the portfolio to maximize Sharpe Ratio or achieve a balanced portfolio.
-- **Monte Carlo Simulation**: Execute extensive simulations to model future portfolio behavior.
-- **Interactive Plots**: Dynamic, interactive charts using Plotly for enhanced data exploration.
-- **Performance Metrics**: Calculation of expected returns, volatility, Value at Risk (VaR), and other key financial indicators.
-- **Ticker Suggestions**: Autocomplete feature for selecting stock tickers.
-- **Explanatory Tooltips**: Hover over info icons to get explanations of input fields.
-
----
-
-## Screenshots
-
-1. **Main Interface with Ticker Selection**
-
-   ![Ticker Selection](screenshots/ticker_selection.png)
-
-   *Description*: The main interface showing the ticker selection with autocomplete suggestions.
-
-2. **Investment Preferences**
-
-   ![Investment Preferences](screenshots/investment_preferences.png)
-
-   *Description*: Users can choose between entering weights with initial investment or specifying dollar amounts per stock.
-
-3. **Editable Weights Table**
-
-   ![Editable Weights Table](screenshots/weights_table.png)
-
-   *Description*: An interactive table where users can input and adjust weights for each stock. The default weights are equal.
-
-4. **Simulation Parameters**
-
-   ![Simulation Parameters](screenshots/simulation_parameters.png)
-
-   *Description*: Set the number of simulations, time horizon, and risk-free rate.
-
-5. **Simulation Results**
-
-   ![Simulation Results](screenshots/simulation_results.png)
-
-   *Description*: The application displays simulation insights and interactive plots after running the Monte Carlo simulation.
-
-6. **Interactive Plots**
-
-   ![Interactive Plots](screenshots/interactive_plots.png)
-
-   *Description*: Interactive charts showing cumulative returns and distribution of final portfolio values.
-
----
-
-## Project Structure
-
+## 📂 **Project Structure**
 ```
-portfolio_management/
-├── README.md
-├── requirements.txt
-├── setup.py
-├── .gitignore
-├── LICENSE
-├── app.py                    # Streamlit application
-├── portfolio_management/
-│   ├── __init__.py
-│   ├── data/
-│   │   ├── __init__.py
-│   │   └── data_loader.py
-│   ├── monte_carlo/
-│   │   ├── __init__.py
-│   │   └── simulation.py
-│   ├── portfolio/
-│   │   ├── __init__.py
-│   │   ├── portfolio.py
-│   │   └── optimizer.py
-│   └── utils/
-│       ├── __init__.py
-│       └── helpers.py
-└── tests/
-    ├── __init__.py
-    ├── test_data_loader.py
-    ├── test_portfolio.py
-    ├── test_simulation.py
-    └── test_optimizer.py
+MonteCarlo/
+├── .git/                   # Git configuration files for version control
+├── portfolio_management/   # Main package for portfolio management logic
+│   ├── data/               # Data processing and storage modules
+│   ├── monte_carlo/       # Monte Carlo simulation logic
+│   ├── portfolio/         # Portfolio allocation logic
+│   ├── utils/             # Helper utilities and shared functions
+│   ├── __init__.py        # Package initialization file
+│   └── main.py            # Main entry point for the system
+├── tests/                 # Unit and integration tests to ensure system reliability
+├── app.py                 # Main application script to launch the GUI
+├── config.py              # Configuration file to set system parameters
+├── requirements.txt      # List of required Python dependencies
+└── setup.py               # Installation script for the project
 ```
 
----
+## 🛠️ **Installation Instructions**
 
-## Installation
-
-### Prerequisites
-
-- **Python 3.7 or higher**: Ensure Python is installed on your system.
-- **pip**: Python package installer.
-- **Git**: For cloning the repository (alternatively, you can download the ZIP file).
-
-### Setup Instructions
-
-1. **Clone the Repository**
-
-   ```bash
-   git clone https://github.com/yourusername/portfolio_management.git
-   ```
-
-2. **Navigate to the Project Directory**
-
-   ```bash
-   cd portfolio_management
-   ```
-
-3. **Create a Virtual Environment** (Recommended)
-
-   ```bash
-   python -m venv venv
-   ```
-
-   - Activate the virtual environment:
-
-     - **Windows**:
-
-       ```bash
-       venv\Scripts\activate
-       ```
-
-     - **macOS/Linux**:
-
-       ```bash
-       source venv/bin/activate
-       ```
-
-4. **Install Dependencies**
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
----
-
-## Usage
-
-### Running the Application
-
-Run the Streamlit app from the terminal:
-
+### **1️⃣ Clone the Repository**
 ```bash
-streamlit run app.py
+git clone https://github.com/username/MonteCarlo.git
+cd MonteCarlo
 ```
 
-This will launch the application in your default web browser.
-
-### Application Workflow
-
-1. **Select Stocks and Date Range**:
-
-   - Use the **Select Stock Tickers** field to search and add stock tickers.
-   - Start typing a ticker symbol, and suggestions will appear.
-   - Select tickers to add them to your portfolio.
-   - Choose the start and end dates for historical data.
-
-2. **Investment Preferences**:
-
-   - **Investment Input Option**: Choose between:
-     - **Use Weights and Initial Investment**
-     - **Use Dollar Amounts per Stock**
-   - Depending on your choice:
-     - **Weights and Initial Investment**:
-       - **Editable Weights Table**: Adjust weights for each stock in the interactive table.
-         - The default weights are equal.
-         - Ensure that the total weights sum up to 1.0.
-       - **Optimize Portfolio**: Optionally, choose to optimize the portfolio.
-         - **Optimization Strategy**: Select between maximizing the Sharpe Ratio or a balanced portfolio.
-       - **Initial Investment**: Enter the total amount to invest.
-     - **Dollar Amounts per Stock**:
-       - Input the dollar amount you wish to invest in each stock.
-       - The application calculates the weights based on these amounts.
-
-3. **Simulation Parameters**:
-
-   - Set the number of simulations.
-   - Set the time horizon in days.
-   - Adjust the risk-free rate if necessary.
-
-4. **Run Simulation**:
-
-   - Click on the **"Run Monte Carlo Simulation"** button.
-
-5. **View Results**:
-
-   - **Simulation Insights**: Key metrics from the Monte Carlo simulation.
-   - **Interactive Plots**: Explore the cumulative returns and distribution of final portfolio values using interactive charts.
-
----
-
-## Testing
-
-Run the unit tests to verify the integrity of each module:
-
+### **2️⃣ Set up a Virtual Environment**
+(Optional but recommended)
 ```bash
-python -m unittest discover -s tests
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
----
+### **3️⃣ Install Dependencies**
+```bash
+pip install -r requirements.txt
+```
 
-## Contributing
+### **4️⃣ Run the Application**
+```bash
+python app.py
+```
 
-Contributions are highly appreciated! Please follow these guidelines:
+## 💡 **How to Use**
 
-1. **Fork the Repository**: Click on the 'Fork' button at the top right corner of the repository page.
+### **1️⃣ Launch the GUI**
+Start the application by running the following command:
+```bash
+python app.py
+```
 
-2. **Create a New Branch**:
+### **2️⃣ Input Portfolio Data**
+- Add custom tickers, expected returns, and risk tolerance.
+- Set the total target return for the portfolio (e.g., 20% to 25%).
 
-   ```bash
-   git checkout -b feature/YourFeature
-   ```
+### **3️⃣ Run Monte Carlo Simulation**
+- Click the **Run Simulation** button in the GUI.
+- The system will generate optimal weights, expected returns, and VaR for each sector.
 
-3. **Commit Your Changes**:
+### **4️⃣ Review Results**
+- View the recommended portfolio allocation and associated risk metrics.
 
-   ```bash
-   git commit -am 'Add a feature'
-   ```
+## ⚙️ **Configuration**
+Modify `config.py` to customize system parameters, including:
+- **Data Sources**: Set API keys and data sources for market data.
+- **Simulation Parameters**: Adjust the number of iterations, constraints, or target return range.
 
-4. **Push to the Branch**:
+## 📑 **Key Files Explained**
 
-   ```bash
-   git push origin feature/YourFeature
-   ```
+- **`app.py`**: Main entry point to run the GUI for user interaction.
+- **`portfolio_management/monte_carlo/`**: Contains core logic for Monte Carlo simulations.
+- **`portfolio_management/portfolio/`**: Handles portfolio allocation, weight calculations, and optimization.
+- **`portfolio_management/utils/`**: Provides utility functions, including logging, file I/O, and data validation.
 
-5. **Open a Pull Request**: Navigate to your forked repository and click on 'New Pull Request'.
+## 🔍 **Testing Instructions**
 
----
+### **1️⃣ Run Unit Tests**
+```bash
+pytest tests/
+```
 
-## License
+### **2️⃣ Check Coverage**
+```bash
+pytest --cov=portfolio_management tests/
+```
 
-This project is licensed under the terms of the [MIT License](LICENSE).
+### **3️⃣ View Test Results**
+Check for any test failures, errors, or skipped tests in the output.
 
----
-
-## Contact
-
-- **Author**: Your Name
-- **Email**: [cristianleo120@gmail.com](mailto:cristianleo120@gmail.com)
-- **GitHub**: [cristianleoo](https://github.com/cristianleoo)
-- **LinkedIn**: [cristian-leo](https://www.linkedin.com/in/cristian-leo/)
-- **Medium**: [cristianleo120](https://medium.com/@cristianleo120)
-
-Feel free to reach out for any inquiries or collaboration opportunities.
-
----
-
-*Disclaimer: This application is intended for educational purposes only. Investment involves risk, and past performance is not indicative of future results. Consult with a qualified financial advisor before making investment decisions.*
+## 📈 **Future Enhancements**
+- **Advanced Risk Analysis**: Add support for Conditional VaR (CVaR) to enhance risk assessments.
+- **Interactive Visualizations**: Include charts and graphs to visualize portfolio performance and risk analysis.
+- **Real-Time Data Updates**: Integrate live market data to provide up-to-date financial insights.
