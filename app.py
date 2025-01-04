@@ -138,16 +138,12 @@ def main():
             st.error('Failed to load stock data. Please check the tickers and date range.')
             return
 
-        if stock_data.isnull().values.any():
-            st.error('Stock data contains missing values. Please check and clean your data.')
-            return
-
         portfolio = Portfolio(stock_data)
-        portfolio.calculate_returns(log=True)  # Use log returns
+        portfolio.calculate_returns()
 
         # Annualized returns and covariance
-        expected_returns = portfolio.returns.mean() * 252  # Annualized log returns
-        covariance_matrix = portfolio.returns.cov() * 252  # Annualized covariance
+        expected_returns = portfolio.returns.mean() * 252
+        covariance_matrix = portfolio.returns.cov() * 252
 
         # Optimization
         if optimize:
