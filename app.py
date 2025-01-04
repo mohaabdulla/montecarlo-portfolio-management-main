@@ -21,10 +21,11 @@ from portfolio_management.utils.utils import merge_tickers
 load_dotenv()
 
 class PortfolioOptimizer:
-    def __init__(self, expected_returns, covariance_matrix, risk_free_rate=0.0):
+    def __init__(self, expected_returns, covariance_matrix, risk_free_rate=0.0, min_weight=0.01):
         self.expected_returns = expected_returns
         self.covariance_matrix = covariance_matrix
         self.risk_free_rate = risk_free_rate
+        self.min_weight = min_weight
 
     def minimize_volatility(self, target_return):
         num_assets = len(self.expected_returns)
@@ -36,8 +37,8 @@ class PortfolioOptimizer:
             {'type': 'eq', 'fun': lambda w: np.dot(w, self.expected_returns) - target_return}  # Target return
         )
 
-        # Bounds: weights between 0 and 1
-        bounds = tuple((0, 1) for _ in range(num_assets))
+        # Bounds: weights between min_weight and 1
+        bounds = tuple((self.min_weight, 1) for _ in range(num_assets))
 
         # Objective: Minimize portfolio variance
         def portfolio_volatility(weights):
@@ -146,7 +147,7 @@ def main():
 
         # Optimization
         if optimize:
-            optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate)
+            optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate, min_weight=0.01)
             target_return = expected_returns.mean()
             st.write(f"Target Return: {target_return:.4f}")
             try:
