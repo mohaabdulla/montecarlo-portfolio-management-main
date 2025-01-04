@@ -133,7 +133,15 @@ def main():
         data_loader = DataLoader()
         stock_data = data_loader.load_data(tickers, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
-      
+        # Validate data
+        if stock_data.empty:
+            st.error('Failed to load stock data. Please check the tickers and date range.')
+            return
+
+        if stock_data.isnull().values.any():
+            st.error('Stock data contains missing values. Please check and clean your data.')
+            return
+
         portfolio = Portfolio(stock_data)
         portfolio.calculate_returns(log=True)  # Use log returns
 
