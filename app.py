@@ -27,26 +27,24 @@ class PortfolioOptimizer:
         self.risk_free_rate = risk_free_rate
         self.min_weight = min_weight
 
-    def maximize_sharpe_ratio(self, partial_weights=None):
+    def minimize_volatility(self, target_return):
         num_assets = len(self.expected_returns)
         initial_weights = np.ones(num_assets) / num_assets
 
-        def negative_sharpe_ratio(weights):
-            portfolio_return = np.dot(weights, self.expected_returns)
-            portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(self.covariance_matrix, weights)))
-            return -(portfolio_return - self.risk_free_rate) / portfolio_volatility
+        # Constraints: weights sum to 1, portfolio return equals target return
+        constraints = (
+            {'type': 'eq', 'fun': lambda w: np.sum(w) - 1},  # Sum of weights = 1
+            {'type': 'eq', 'fun': lambda w: np.dot(w, self.expected_returns) - target_return}  # Target return
+        )
 
-        constraints = [{'type': 'eq', 'fun': lambda w: np.sum(w) - 1}]
-        
-        # Apply partial weights as constraints
-        if partial_weights:
-            for i, weight in enumerate(partial_weights):
-                if weight is not None:
-                    constraints.append({'type': 'eq', 'fun': lambda w, i=i, weight=weight: w[i] - weight})
+        # Bounds: weights between min_weight and 1
+        bounds = tuple((self.min_weight, 1) for _ in range(num_assets))
 
-        bounds = [(self.min_weight, 1) for _ in range(num_assets)]
-        result = minimize(negative_sharpe_ratio, initial_weights, method='SLSQP', bounds=bounds, constraints=constraints)
+        # Objective: Minimize portfolio variance
+        def portfolio_volatility(weights):
+            return np.sqrt(np.dot(weights.T, np.dot(self.covariance_matrix, weights)))
 
+        result = minimize(portfolio_volatility, initial_weights, method='SLSQP', bounds=bounds, constraints=constraints)
         if not result.success:
             raise ValueError(f"Optimization failed: {result.message}")
         return result.x
@@ -69,7 +67,12 @@ def main():
 
     # Input: Stock Tickers
     st.header('1. Select Stocks and Date Range')
-    selected_tickers = st.multiselect('Select Stock Tickers:', options=ticker_list)
+    st.write("Start typing a stock ticker and select from the suggestions.")
+    selected_tickers = st.multiselect(
+        'Select Stock Tickers:',
+        options=ticker_list,
+        help='Type to search and select stock tickers.'
+    )
 
     if not selected_tickers:
         st.info('Please select at least one stock ticker to proceed.')
@@ -77,68 +80,122 @@ def main():
 
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input('Start Date', value=pd.to_datetime('2020-01-01'))
+        start_date = st.date_input('Start Date', value=pd.to_datetime('2020-01-01'), help='The start date for historical data.')
     with col2:
-        end_date = st.date_input('End Date', value=pd.to_datetime(datetime.today() - relativedelta(days=1)))
+        end_date = st.date_input('End Date', value=pd.to_datetime(datetime.today() - relativedelta(days=1)), help='The end date for historical data.')
+
+    tickers = selected_tickers
 
     # Input: Investment Options
     st.header('2. Investment Preferences')
-    risk_free_rate = st.number_input('Risk-Free Rate (Annualized):', value=0.02, min_value=0.0, max_value=1.0, step=0.01)
+    risk_free_rate = st.number_input(
+        'Risk-Free Rate (Annualized):',
+        value=0.02,
+        min_value=0.0,
+        max_value=1.0,
+        step=0.01,
+        help='The risk-free rate used for calculations, typically a treasury bond yield.'
+    )
 
-    optimize = st.checkbox('Optimize Portfolio', value=False)
-    partial_weights = [None] * len(selected_tickers)
+    # Weighting method selection
+    weighting_method = st.radio(
+        "Choose weighting method:",
+        ("Equal Weights", "Optimize Portfolio", "Custom Weights")
+    )
 
-    if optimize:
-        st.subheader("Partial Weights (Optional)")
-        for i, ticker in enumerate(selected_tickers):
-            partial_weights[i] = st.number_input(
-                f"Weight for {ticker} (leave blank for optimizer to adjust):",
+    weights = None
+    if weighting_method == "Custom Weights":
+        st.subheader("Enter Custom Weights for Each Stock")
+        custom_weights = {}
+        for ticker in selected_tickers:
+            weight = st.number_input(
+                f"Weight for {ticker}:",
                 min_value=0.0,
                 max_value=1.0,
-                step=0.01,
-                value=None
+                value=1.0 / len(selected_tickers),
+                step=0.01
             )
-    
-    initial_investment = st.number_input('Initial Investment ($):', value=1000.0, min_value=0.0)
+            custom_weights[ticker] = weight
+
+      
+        
+        weights = [custom_weights[ticker] for ticker in selected_tickers]
+    elif weighting_method == "Equal Weights":
+        weights = [1.0 / len(tickers)] * len(tickers)
+    else:  # Optimize Portfolio
+        optimize = True
+
+    initial_investment = st.number_input(
+        'Initial Investment ($):',
+        value=1000.0,
+        min_value=0.0,
+        help='Total amount you plan to invest.'
+    )
 
     # Input: Simulation Parameters
     st.header('3. Simulation Parameters')
-    num_simulations = st.number_input('Number of Simulations:', value=10000, min_value=100, step=100)
-    time_horizon = st.number_input('Time Horizon (Days):', value=252, min_value=1, step=1)
+    col1, col2 = st.columns(2)
+    with col1:
+        num_simulations = st.number_input(
+            'Number of Simulations:',
+            value=10000,
+            min_value=100,
+            step=100,
+            help='Number of Monte Carlo simulations to run.'
+        )
+    with col2:
+        time_horizon = st.number_input(
+            'Time Horizon (Days):',
+            value=252,
+            min_value=1,
+            step=1,
+            help='Investment period in days (e.g., 252 for one year).'
+        )
 
     # Button to Run Simulation
     run_simulation = st.button('Run Monte Carlo Simulation')
     if run_simulation:
+        # Load data
         data_loader = DataLoader()
-        stock_data = data_loader.load_data(selected_tickers, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
+        stock_data = data_loader.load_data(tickers, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
+        # Validate data
         if stock_data.empty:
             st.error('Failed to load stock data. Please check the tickers and date range.')
             return
 
         portfolio = Portfolio(stock_data)
         portfolio.calculate_returns()
+
+        # Annualized returns and covariance
         expected_returns = portfolio.returns.mean() * 252
         covariance_matrix = portfolio.returns.cov() * 252
 
-        if optimize:
+        # Optimization
+        if weighting_method == "Optimize Portfolio":
             optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate, min_weight=0.01)
-            weights = optimizer.maximize_sharpe_ratio(partial_weights)
-        else:
-            weights = [1.0 / len(selected_tickers)] * len(selected_tickers)
+            target_return = expected_returns.mean()
+            st.write(f"Target Return: {target_return:.4f}")
+            try:
+                weights = optimizer.minimize_volatility(target_return=target_return)
+                st.subheader('Optimal Portfolio Weights:')
+                display_optimal_weights(tickers, weights, streamlit_display=True)
+            except ValueError as e:
+                st.error(f"Optimization failed: {e}")
+                return
 
-        st.subheader('Optimized Weights:')
-        weight_df = pd.DataFrame({'Ticker': selected_tickers, 'Weight': weights})
-        st.dataframe(weight_df)
-
-        simulation = MonteCarloSimulation(portfolio.returns, initial_investment, weights)
+        # Run Monte Carlo simulation
+        log_returns = np.log(stock_data / stock_data.shift(1)).dropna()  # Correct log returns
+        simulation = MonteCarloSimulation(log_returns, initial_investment, weights)
         all_cumulative_returns, final_portfolio_values = simulation.run_simulation(int(num_simulations), int(time_horizon))
 
+        # Display Results
         st.header('4. Simulation Results')
         insights = get_simulation_insights(final_portfolio_values, initial_investment)
         for key, value in insights.items():
             st.write(f"**{key}:** {value}")
 
+        # Plot results
         st.subheader('Interactive Plots')
         plot_interactive_simulation_results(all_cumulative_returns, final_portfolio_values, end_date)
 
