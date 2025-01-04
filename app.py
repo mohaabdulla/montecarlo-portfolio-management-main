@@ -194,7 +194,7 @@ def main():
             'Ticker': tickers,
             'Weight': weights
         })
-        st.dataframe(weight_df, use_container_width=True)  # Responsive table
+        st.dataframe(weight_df)
 
         # Run Monte Carlo simulation
         log_returns = np.log(stock_data / stock_data.shift(1)).dropna()  # Correct log returns
