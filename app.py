@@ -2,7 +2,6 @@ import streamlit as st
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
-import numpy as np
 from portfolio_management.data.data_loader import DataLoader
 from portfolio_management.portfolio.portfolio import Portfolio
 from portfolio_management.portfolio.optimizer import PortfolioOptimizer
@@ -138,22 +137,16 @@ def main():
         data_loader = DataLoader()
         stock_data = data_loader.load_data(tickers, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
-        # Validate data
         if stock_data.empty:
             st.error('Failed to load stock data. Please check the tickers and date range.')
             return
 
        
 
-        if (stock_data <= 0).values.any():
-            st.error("Stock data contains zero or negative values, which is invalid.")
-            return
-
-        # Calculate log returns
         portfolio = Portfolio(stock_data)
-        portfolio.calculate_returns()  # Ensure this uses log returns internally
-        expected_returns = (1 + portfolio.returns.mean()) ** 252 - 1  # Compounded annual returns
-        covariance_matrix = portfolio.returns.cov() * 252  # Annualized covariance
+        portfolio.calculate_returns()
+        expected_returns = portfolio.returns.mean() * 252
+        covariance_matrix = portfolio.returns.cov() * 252
 
         if weighting_method == "Optimize Portfolio":
             optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate)
@@ -165,7 +158,6 @@ def main():
         else:  # Equal Weights
             weights = [1.0 / len(tickers)] * len(tickers)
 
-        # Run Monte Carlo simulation
         simulation = MonteCarloSimulation(portfolio.returns, initial_investment, weights)
         all_cumulative_returns, final_portfolio_values = simulation.run_simulation(int(num_simulations), int(time_horizon))
 
@@ -175,6 +167,8 @@ def main():
             st.write(f"**{key}:** {value}")
 
         plot_interactive_simulation_results(all_cumulative_returns, final_portfolio_values, end_date)
+
+       
 
 if __name__ == '__main__':
     main()
