@@ -188,6 +188,14 @@ def main():
                 st.error(f"Optimization failed: {e}")
                 return
 
+        # Display the weights for each stock
+        st.subheader('Portfolio Weights:')
+        weight_df = pd.DataFrame({
+            'Ticker': tickers,
+            'Weight': weights
+        })
+        st.dataframe(weight_df)
+
         # Run Monte Carlo simulation
         log_returns = np.log(stock_data / stock_data.shift(1)).dropna()  # Correct log returns
         simulation = MonteCarloSimulation(log_returns, initial_investment, weights)
