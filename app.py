@@ -142,8 +142,8 @@ def main():
         portfolio.calculate_returns()
 
         # Annualized returns and covariance
-        expected_returns = portfolio.returns.mean() * 50
-        covariance_matrix = portfolio.returns.cov() * 50
+        expected_returns = portfolio.returns.mean() * 252
+        covariance_matrix = portfolio.returns.cov() * 252
 
         # Optimization
         if optimize:
