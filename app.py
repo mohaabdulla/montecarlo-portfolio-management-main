@@ -133,17 +133,13 @@ def main():
         data_loader = DataLoader()
         stock_data = data_loader.load_data(tickers, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'))
 
-        # Validate data
-        if stock_data.empty:
-            st.error('Failed to load stock data. Please check the tickers and date range.')
-            return
-
+      
         portfolio = Portfolio(stock_data)
-        portfolio.calculate_returns()
+        portfolio.calculate_returns(log=True)  # Use log returns
 
         # Annualized returns and covariance
-        expected_returns = portfolio.returns.mean() * 252
-        covariance_matrix = portfolio.returns.cov() * 252
+        expected_returns = portfolio.returns.mean() * 252  # Annualized log returns
+        covariance_matrix = portfolio.returns.cov() * 252  # Annualized covariance
 
         # Optimization
         if optimize:
