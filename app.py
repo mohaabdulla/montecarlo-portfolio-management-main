@@ -161,7 +161,8 @@ def main():
             weights = [1.0 / len(tickers)] * len(tickers)  # Equal weights
 
         # Run Monte Carlo simulation
-        simulation = MonteCarloSimulation(portfolio.returns, initial_investment, weights)
+        log_returns = np.log(stock_data / stock_data.shift(1)).dropna()  # Correct log returns
+        simulation = MonteCarloSimulation(log_returns, initial_investment, weights)
         all_cumulative_returns, final_portfolio_values = simulation.run_simulation(int(num_simulations), int(time_horizon))
 
         # Display Results
