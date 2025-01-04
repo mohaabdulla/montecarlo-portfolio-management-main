@@ -25,7 +25,7 @@ def main():
 
     st.write(""" 
         Welcome to the Portfolio Management Application. Define your investment preferences and utilize Monte Carlo simulations to project and analyze potential portfolio performance.
-        """)
+    """)
 
     @st.cache_data
     def load_ticker_list():
@@ -66,12 +66,17 @@ def main():
         step=0.01,
         help='The risk-free rate used for calculations, typically a treasury bond yield.'
     )
+
     st.write('Choose Investment Input Option: Use Weights and Initial Investment')
+    custom_weights = None
+    initial_investment = st.number_input(
+        'Initial Investment ($):',
+        value=1000.0,
+        min_value=0.0,
+        help='Total amount you plan to invest.'
+    )
 
-    weights = None
-    initial_investment = 1000.0  # Default value
-
-    # Add this in the Investment Preferences section
+    # Add weighting method
     weighting_method = st.radio(
         "Choose weighting method:",
         ("Optimize Portfolio", "Custom Weights", "Equal Weights")
@@ -80,35 +85,31 @@ def main():
     if weighting_method == "Custom Weights":
         custom_weights = {}
         st.write("Enter custom weights (must sum to 1.0)")
-        
-        # Create input fields for each selected ticker
+
         for ticker in selected_tickers:
             weight = st.number_input(
                 f"Weight for {ticker}:",
                 min_value=0.0,
                 max_value=1.0,
-                value=1.0/len(selected_tickers),
+                value=1.0 / len(selected_tickers),
                 step=0.01
             )
             custom_weights[ticker] = weight
-        
-   
-        weights = [custom_weights[ticker] for ticker in selected_tickers]
+
+        # Validate weights sum to 1
+        total_weight = sum(custom_weights.values())
+        if abs(total_weight - 1.0) > 0.0001:
+            st.warning(f"Total weights sum to {total_weight:.2f}. Please adjust to sum to 1.0")
+            st.stop()
 
     optimization_choice = st.selectbox(
         'Optimization Strategy',
         ('Maximize Sharpe Ratio', 'Balanced Portfolio'),
         help='Choose an optimization strategy.'
     )
-    balanced = (optimization_choice == 'Balanced Portfolio')
-    custom_weights = None
 
-    initial_investment = st.number_input(
-        'Initial Investment ($):',
-        value=1000.0,
-        min_value=0.0,
-        help='Total amount you plan to invest.'
-    )
+    balanced = (optimization_choice == 'Balanced Portfolio')
+
     # Input: Simulation Parameters
     st.header('3. Simulation Parameters')
     col1, col2 = st.columns(2)
@@ -139,15 +140,14 @@ def main():
         if stock_data.empty:
             st.error('Failed to load stock data. Please check the tickers and date range.')
             return
+
         st.write("Loaded data shape:", stock_data.shape)
         st.write("Loaded data head:", stock_data.head())
+
         portfolio = Portfolio(stock_data)
         portfolio.calculate_returns()
         expected_returns = portfolio.returns.mean() * 252
         covariance_matrix = portfolio.returns.cov() * 252
-
-
-
 
         if weighting_method == "Optimize Portfolio":
             optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate)
@@ -155,10 +155,9 @@ def main():
             st.write(f"Optimized Portfolio Sharpe Ratio: {sharpe:.4f}")
             display_optimal_weights(tickers, weights, streamlit_display=True)
         elif weighting_method == "Custom Weights":
-            # Use the custom weights directly
             weights = [custom_weights[ticker] for ticker in tickers]
         else:  # Equal Weights
-            weights = [1.0/len(tickers)] * len(tickers)
+            weights = [1.0 / len(tickers)] * len(tickers)
 
         simulation = MonteCarloSimulation(portfolio.returns, initial_investment, weights)
         all_cumulative_returns, final_portfolio_values = simulation.run_simulation(int(num_simulations), int(time_horizon))
@@ -170,24 +169,19 @@ def main():
 
         plot_interactive_simulation_results(all_cumulative_returns, final_portfolio_values, end_date)
 
+        # Sector allocation
+        sector_data = data_loader.get_sector_data(tickers)
+        sector_weights = {}
+        for ticker, weight in zip(tickers, weights):
+            sector = sector_data.get(ticker, 'Unknown')  # Safe access for missing data
+            sector_weights[sector] = sector_weights.get(sector, 0) + weight
+
+        st.subheader('Sector Allocation:')
+        sector_df = pd.DataFrame({
+            'Sector': list(sector_weights.keys()),
+            'Weight': list(sector_weights.values())
+        })
+        st.dataframe(sector_df)
 
 if __name__ == '__main__':
     main()
-
-if 'tickers' in locals() and 'weights' in locals():
-    from portfolio_management.data.data_loader import DataLoader
-    data_loader = DataLoader()
-    sector_data = data_loader.get_sector_data(tickers)
-    sector_weights = {}
-    for ticker, weight in zip(tickers, weights):
-        sector = sector_data.get(ticker, 'Unknown')  # Safe access for missing data
-        sector_weights[sector] = sector_weights.get(sector, 0) + weight
-
-    st.subheader('Sector Allocation:')
-    sector_df = pd.DataFrame({
-        'Sector': sector_weights.keys(),
-        'Weight': sector_weights.values()
-    })
-    st.dataframe(sector_df)
-else:
-    st.warning("Please run the simulation first to generate tickers and weights.")
