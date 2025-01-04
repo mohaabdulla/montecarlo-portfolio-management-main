@@ -21,7 +21,7 @@ from portfolio_management.utils.utils import merge_tickers
 load_dotenv()
 
 class PortfolioOptimizer:
-    def __init__(self, expected_returns, covariance_matrix, risk_free_rate=0.0, min_weight=0.01):
+    def __init__(self, expected_returns, covariance_matrix, risk_free_rate=0.0, min_weight=0.001):
         self.expected_returns = expected_returns
         self.covariance_matrix = covariance_matrix
         self.risk_free_rate = risk_free_rate
