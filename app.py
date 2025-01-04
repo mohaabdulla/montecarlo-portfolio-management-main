@@ -3,9 +3,9 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
 import numpy as np
+from scipy.optimize import minimize
 from portfolio_management.data.data_loader import DataLoader
 from portfolio_management.portfolio.portfolio import Portfolio
-from portfolio_management.portfolio.optimizer import PortfolioOptimizer
 from portfolio_management.monte_carlo.simulation import MonteCarloSimulation
 from portfolio_management.utils.helpers import (
     plot_interactive_simulation_results,
@@ -19,6 +19,34 @@ from portfolio_management.utils.nasdaq_nyse import get_nasdaq_nyse_tickers
 from portfolio_management.utils.utils import merge_tickers
 
 load_dotenv()
+
+class PortfolioOptimizer:
+    def __init__(self, expected_returns, covariance_matrix, risk_free_rate=0.0):
+        self.expected_returns = expected_returns
+        self.covariance_matrix = covariance_matrix
+        self.risk_free_rate = risk_free_rate
+
+    def minimize_volatility(self, target_return):
+        num_assets = len(self.expected_returns)
+        initial_weights = np.ones(num_assets) / num_assets
+
+        # Constraints: weights sum to 1, portfolio return equals target return
+        constraints = (
+            {'type': 'eq', 'fun': lambda w: np.sum(w) - 1},  # Sum of weights = 1
+            {'type': 'eq', 'fun': lambda w: np.dot(w, self.expected_returns) - target_return}  # Target return
+        )
+
+        # Bounds: weights between 0 and 1
+        bounds = tuple((0, 1) for _ in range(num_assets))
+
+        # Objective: Minimize portfolio variance
+        def portfolio_volatility(weights):
+            return np.sqrt(np.dot(weights.T, np.dot(self.covariance_matrix, weights)))
+
+        result = minimize(portfolio_volatility, initial_weights, method='SLSQP', bounds=bounds, constraints=constraints)
+        if not result.success:
+            raise ValueError(f"Optimization failed: {result.message}")
+        return result.x
 
 def main():
     st.title('Portfolio Management with Monte Carlo Simulation')
@@ -68,74 +96,14 @@ def main():
         help='The risk-free rate used for calculations, typically a treasury bond yield.'
     )
 
-    investment_option = st.radio(
-        'Choose Investment Input Option:',
-        ('Use Weights and Initial Investment', 'Use Dollar Amounts per Stock'),
-        help='Select how you want to input your investment allocations.'
+    optimize = st.checkbox('Optimize Portfolio', value=False, help='Select to optimize portfolio weights.')
+
+    initial_investment = st.number_input(
+        'Initial Investment ($):',
+        value=1000.0,
+        min_value=0.0,
+        help='Total amount you plan to invest.'
     )
-
-    weights = None
-    initial_investment = 1000.0  # Default value
-
-    if investment_option == 'Use Weights and Initial Investment':
-        st.subheader('Weights and Initial Investment')
-        st.write('Input weights for each stock or choose to optimize the portfolio.')
-
-        optimize = st.checkbox('Optimize Portfolio', value=False, help='Select to automatically calculate optimal weights for your portfolio.')
-        if optimize:
-            optimization_choice = st.selectbox(
-                'Optimization Strategy',
-                ('Maximize Sharpe Ratio', 'Balanced Portfolio'),
-                help='Choose an optimization strategy.'
-            )
-            balanced = (optimization_choice == 'Balanced Portfolio')
-        else:
-            balanced = False
-            st.write("Edit the weights for each stock below. The weights should sum to 1.0.")
-            default_weight = 1.0 / len(tickers)
-            weights_df = pd.DataFrame({
-                'Ticker': tickers,
-                'Weight': [default_weight] * len(tickers)
-            })
-            st.info('You can edit the weights in the table below. The weights should sum to 1.0.')
-            weights_df = st.data_editor(
-                weights_df,
-                num_rows="dynamic",
-                use_container_width=True,
-                key='weights_editor',
-            )
-            total_weight = weights_df['Weight'].sum()
-            if abs(total_weight - 1.0) > 1e-6:
-                st.error(f'Total weights must sum to 1. Currently summing to {total_weight:.4f}')
-                st.stop()
-            weights = weights_df['Weight'].tolist()
-
-        initial_investment = st.number_input(
-            'Initial Investment ($):',
-            value=1000.0,
-            min_value=0.0,
-            help='Total amount you plan to invest.'
-        )
-
-    else:
-        st.subheader('Dollar Amounts per Stock')
-        st.write('Input the dollar amount you wish to invest in each stock.')
-        amounts = []
-        for ticker in tickers:
-            amount = st.number_input(
-                f'Amount for {ticker} ($):',
-                value=100.0,
-                min_value=0.0,
-                help=f'Amount to invest in {ticker}.'
-            )
-            amounts.append(amount)
-        total_investment = sum(amounts)
-        if total_investment == 0:
-            st.error('Total investment cannot be zero.')
-            st.stop()
-        weights = [amount / total_investment for amount in amounts]
-        initial_investment = total_investment
-        optimize = False  # Disable optimization when dollar amounts are provided
 
     # Input: Simulation Parameters
     st.header('3. Simulation Parameters')
@@ -171,24 +139,27 @@ def main():
 
         portfolio = Portfolio(stock_data)
         portfolio.calculate_returns()
+
+        # Annualized returns and covariance
         expected_returns = portfolio.returns.mean() * 252
         covariance_matrix = portfolio.returns.cov() * 252
 
-        # Determine weights
-        if investment_option == 'Use Weights and Initial Investment' and optimize:
+        # Optimization
+        if optimize:
             optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate)
-            if balanced:
-                weights = optimizer.minimize_volatility(target_return=expected_returns.mean())
-                st.subheader('Optimal Balanced Portfolio Weights:')
-            else:
-                weights = optimizer.maximize_sharpe_ratio()
-                st.subheader('Optimal Portfolio Weights to Maximize Sharpe Ratio:')
-            display_optimal_weights(tickers, weights, streamlit_display=True)
-        elif weights is not None:
-            st.subheader('Using Provided Weights:')
-            display_optimal_weights(tickers, weights, streamlit_display=True)
+            target_return = expected_returns.mean()
+            st.write(f"Target Return: {target_return:.4f}")
+            try:
+                weights = optimizer.minimize_volatility(target_return=target_return)
+                st.subheader('Optimal Portfolio Weights:')
+                display_optimal_weights(tickers, weights, streamlit_display=True)
+            except ValueError as e:
+                st.error(f"Optimization failed: {e}")
+                return
+        else:
+            weights = [1.0 / len(tickers)] * len(tickers)  # Equal weights
 
-        # Monte Carlo Simulation
+        # Run Monte Carlo simulation
         simulation = MonteCarloSimulation(portfolio.returns, initial_investment, weights)
         all_cumulative_returns, final_portfolio_values = simulation.run_simulation(int(num_simulations), int(time_horizon))
 
