@@ -27,6 +27,28 @@ class PortfolioOptimizer:
         self.risk_free_rate = risk_free_rate
         self.min_weight = min_weight
 
+    def maximize_sharpe_ratio(self):
+        num_assets = len(self.expected_returns)
+        initial_weights = np.ones(num_assets) / num_assets
+
+        # Constraints: weights sum to 1
+        constraints = {'type': 'eq', 'fun': lambda w: np.sum(w) - 1}
+
+        # Bounds: weights between min_weight and 1
+        bounds = tuple((self.min_weight, 1) for _ in range(num_assets))
+
+        # Objective: Maximize Sharpe Ratio
+        def negative_sharpe_ratio(weights):
+            portfolio_return = np.dot(weights, self.expected_returns)
+            portfolio_volatility = np.sqrt(np.dot(weights.T, np.dot(self.covariance_matrix, weights)))
+            sharpe_ratio = (portfolio_return - self.risk_free_rate) / portfolio_volatility
+            return -sharpe_ratio
+
+        result = minimize(negative_sharpe_ratio, initial_weights, method='SLSQP', bounds=bounds, constraints=constraints)
+        if not result.success:
+            raise ValueError(f"Optimization failed: {result.message}")
+        return result.x
+
     def minimize_volatility(self, target_return):
         num_assets = len(self.expected_returns)
         initial_weights = np.ones(num_assets) / num_assets
@@ -104,6 +126,7 @@ def main():
     )
 
     weights = None
+    optimize = False
     if weighting_method == "Custom Weights":
         st.subheader("Enter Custom Weights for Each Stock")
         custom_weights = {}
@@ -117,13 +140,22 @@ def main():
             )
             custom_weights[ticker] = weight
 
-      
+        # Validate that weights sum to 1
+        total_weight = sum(custom_weights.values())
+        if abs(total_weight - 1.0) > 0.0001:
+            st.error(f"Total weights must sum to 1. Currently summing to {total_weight:.2f}. Please adjust.")
+            st.stop()
         
         weights = [custom_weights[ticker] for ticker in selected_tickers]
     elif weighting_method == "Equal Weights":
         weights = [1.0 / len(tickers)] * len(tickers)
     else:  # Optimize Portfolio
         optimize = True
+        optimization_strategy = st.selectbox(
+            "Choose Optimization Strategy:",
+            ("Maximize Sharpe Ratio", "Minimize Volatility"),
+            help="Choose between maximizing Sharpe Ratio or minimizing portfolio volatility."
+        )
 
     initial_investment = st.number_input(
         'Initial Investment ($):',
@@ -172,17 +204,17 @@ def main():
         covariance_matrix = portfolio.returns.cov() * 252
 
         # Optimization
-        if weighting_method == "Optimize Portfolio":
+        if optimize:
             optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate, min_weight=0.01)
-            target_return = expected_returns.mean()
-            st.write(f"Target Return: {target_return:.4f}")
-            try:
+            if optimization_strategy == "Maximize Sharpe Ratio":
+                weights = optimizer.maximize_sharpe_ratio()
+                st.subheader('Optimized Weights (Maximize Sharpe Ratio):')
+            else:
+                target_return = expected_returns.mean()
                 weights = optimizer.minimize_volatility(target_return=target_return)
-                st.subheader('Optimal Portfolio Weights:')
-                display_optimal_weights(tickers, weights, streamlit_display=True)
-            except ValueError as e:
-                st.error(f"Optimization failed: {e}")
-                return
+                st.subheader('Optimized Weights (Minimize Volatility):')
+
+            display_optimal_weights(tickers, weights, streamlit_display=True)
 
         # Run Monte Carlo simulation
         log_returns = np.log(stock_data / stock_data.shift(1)).dropna()  # Correct log returns
