@@ -180,13 +180,7 @@ def main():
             optimizer = PortfolioOptimizer(expected_returns, covariance_matrix, risk_free_rate=risk_free_rate, min_weight=0.01)
             target_return = expected_returns.mean()
             st.write(f"Target Return: {target_return:.4f}")
-            try:
-                weights = optimizer.minimize_volatility(target_return=target_return)
-                st.subheader('Optimal Portfolio Weights:')
-                display_optimal_weights(tickers, weights, streamlit_display=True)
-            except ValueError as e:
-                st.error(f"Optimization failed: {e}")
-                return
+            
 
         # Display the weights for each stock
         st.subheader('Portfolio Weights:')
