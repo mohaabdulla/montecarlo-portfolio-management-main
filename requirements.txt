@@ -60,3 +60,4 @@ yfinance==0.2.43
 streamlit
 python-dotenv
 
+
