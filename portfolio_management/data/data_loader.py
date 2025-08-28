@@ -5,9 +5,12 @@ from typing import List, Dict, Union
 class DataLoader:
     def load_data(self, tickers: List[str], start_date: Union[str, pd.Timestamp], end_date: Union[str, pd.Timestamp]) -> pd.DataFrame:
         stock_data: Dict[str, pd.Series] = {}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
         for ticker in tickers:
             try:
-                data: pd.DataFrame = yf.download(ticker, start=start_date, end=end_date, progress=False)
+                data: pd.DataFrame = yf.download(ticker, start=start_date, end=end_date, progress=False, headers=headers)
                 if not data.empty:
                     stock_data[ticker] = data['Adj Close']
                 else:
@@ -19,9 +22,13 @@ class DataLoader:
     def get_sector_data(self, tickers: List[str]) -> Dict[str, str]:
         """Fetches sector data for a list of stock tickers using Yahoo Finance."""
         sector_data = {}
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
         for ticker in tickers:
             try:
-                stock = yf.Ticker(ticker)
+                stock = yf.Ticker(ticker, session=yf.Session())
+                stock.session.headers.update(headers)
                 sector_data[ticker] = stock.info.get('sector', 'Unknown')
             except Exception as e:
                 print(f"Error fetching sector data for {ticker}: {e}")
@@ -35,4 +42,3 @@ if __name__ == "__main__":
     end_date: str = '2023-01-01'
     stock_data: pd.DataFrame = data_loader.load_data(tickers, start_date, end_date)
     print(stock_data.head())
-
