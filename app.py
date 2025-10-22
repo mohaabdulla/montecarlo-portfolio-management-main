@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
@@ -369,8 +370,6 @@ with st.spinner("Running time series simulation for Max Sharpe portfolio…"):
     all_paths, final_values = run_time_series_simulation(
         w_max_sharpe, mean_daily, cov_daily, int(time_horizon), int(n_sims), initial_investment
     )
-
-from plotly.subplots import make_subplots
 
 fig2 = make_subplots(
     rows=1, cols=2,
