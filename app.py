@@ -224,7 +224,7 @@ with st.sidebar:
 
     allow_short = st.checkbox("Allow short selling (weights may be negative)", value=False)
 
-    n_sims = st.slider("Number of Monte Carlo portfolios", min_value=500, max_value=20000, value=5000, step=500)
+    n_sims = st.slider("Number of Monte Carlo portfolios", min_value=500, max_value=2000000, value=5000, step=500)
 
     st.markdown("---")
     st.caption("This version avoids slow/blocked network calls for ticker lists and uses a batched yfinance loader.")
