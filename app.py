@@ -95,31 +95,37 @@ def portfolio_performance(weights, mean_daily, cov_daily, rf=0.0):
 
 
 def simulate_portfolios(n, mean_daily, cov_daily, rf=0.0, allow_short=False):
-    """
-    Monte Carlo simulation of random portfolios.
-    If allow_short=False: weights are on the simplex (Dirichlet).
-    If allow_short=True: sample from normal, then normalize to sum to 1 (weights may be negative).
-    """
     dim = len(mean_daily)
-    rets = np.zeros(n)
-    vols = np.zeros(n)
-    sharpes = np.zeros(n)
-    weights_list = []
+    
+    if allow_short:
+        weights_list = np.random.normal(size=(n, dim))
+        sums = weights_list.sum(axis=1, keepdims=True)
+        sums[np.abs(sums) < 1e-10] = 1.0
+        weights_list = weights_list / sums
+    else:
+        weights_list = np.random.dirichlet(np.ones(dim), size=n)
+    
+    rets = np.dot(weights_list, mean_daily) * TRADING_DAYS
+    vars = np.sum(weights_list @ cov_daily * weights_list, axis=1) * TRADING_DAYS
+    vols = np.sqrt(np.maximum(vars, 0))
+    sharpes = np.divide(rets - rf, vols, where=vols > 0, out=np.zeros_like(vols))
 
-    for i in range(n):
-        if allow_short:
-            w = np.random.normal(size=dim)
-            if np.isclose(w.sum(), 0):
-                w = np.ones(dim)
-            w = w / w.sum()
-        else:
-            w = np.random.dirichlet(np.ones(dim), size=1).flatten()
+    return rets, vols, sharpes, weights_list
 
-        mu, vol, s = portfolio_performance(w, mean_daily, cov_daily, rf)
-        rets[i], vols[i], sharpes[i] = mu, vol, s
-        weights_list.append(w)
 
-    return rets, vols, sharpes, np.array(weights_list)
+def run_time_series_simulation(weights, mean_daily, cov_daily, time_horizon, n_sims, initial_investment):
+    dim = len(mean_daily)
+    all_paths = np.zeros((time_horizon, n_sims))
+    
+    daily_returns = np.random.multivariate_normal(mean_daily, cov_daily, size=(time_horizon, n_sims))
+    portfolio_returns = daily_returns @ weights
+    
+    cumulative = np.cumprod(1 + portfolio_returns, axis=0)
+    all_paths = cumulative * initial_investment
+    
+    final_values = all_paths[-1, :]
+    
+    return all_paths, final_values
 
 
 def optimize_min_variance(mean_daily, cov_daily, allow_short=False):
@@ -219,7 +225,11 @@ with st.sidebar:
 
     allow_short = st.checkbox("Allow short selling (weights may be negative)", value=False)
 
-    n_sims = st.slider("Number of Monte Carlo portfolios", min_value=500000, max_value=1000000, value=5000, step=500)
+    n_sims = st.number_input("Number of Monte Carlo portfolios", min_value=1000, max_value=10000000, value=10000, step=1000)
+    
+    time_horizon = st.number_input("Time horizon (days)", min_value=1, max_value=1000, value=252, step=1)
+    
+    initial_investment = st.number_input("Initial investment ($)", min_value=1000, max_value=10000000, value=5000000, step=1000)
 
     st.markdown("---")
     st.caption("This version avoids slow/blocked network calls for ticker lists and uses a batched yfinance loader.")
@@ -278,7 +288,7 @@ st.dataframe(summary[["Return %", "Volatility %"]], use_container_width=True)
 # Simulation
 with st.spinner("Running Monte Carlo simulation…"):
     sim_rets, sim_vols, sim_sharpes, sim_weights = simulate_portfolios(
-        n_sims, mean_daily, cov_daily, rf=rf, allow_short=allow_short
+        int(n_sims), mean_daily, cov_daily, rf=rf, allow_short=allow_short
     )
 
 # Optimization
@@ -352,6 +362,71 @@ fig.update_layout(
     yaxis_title="Expected Return (annualized)",
 )
 st.plotly_chart(fig, use_container_width=True)
+
+# Time series simulation for Max Sharpe portfolio
+st.markdown("### Monte Carlo Simulation - Portfolio Value Over Time")
+with st.spinner("Running time series simulation for Max Sharpe portfolio…"):
+    all_paths, final_values = run_time_series_simulation(
+        w_max_sharpe, mean_daily, cov_daily, int(time_horizon), int(n_sims), initial_investment
+    )
+
+from plotly.subplots import make_subplots
+
+fig2 = make_subplots(
+    rows=1, cols=2,
+    subplot_titles=('Monte Carlo Simulation - Cumulative Returns', 'Distribution of Final Portfolio Values')
+)
+
+num_paths_to_plot = min(100, int(n_sims))
+time_steps = np.arange(int(time_horizon))
+for i in range(num_paths_to_plot):
+    fig2.add_trace(
+        go.Scatter(
+            x=time_steps,
+            y=all_paths[:, i],
+            mode='lines',
+            line=dict(width=1),
+            showlegend=False,
+            opacity=0.6
+        ),
+        row=1, col=1
+    )
+
+fig2.update_xaxes(title_text='Time Steps', row=1, col=1)
+fig2.update_yaxes(title_text='Portfolio Value ($)', row=1, col=1)
+
+mean_final = np.mean(final_values)
+var_95 = np.percentile(final_values, 5)
+
+fig2.add_trace(
+    go.Histogram(
+        x=final_values,
+        nbinsx=50,
+        marker_color='blue',
+        opacity=0.75,
+        showlegend=False
+    ),
+    row=1, col=2
+)
+
+fig2.add_vline(x=mean_final, line=dict(color='red', dash='dash'), row=1, col=2)
+fig2.add_vline(x=var_95, line=dict(color='green', dash='dash'), row=1, col=2)
+
+fig2.update_xaxes(title_text='Final Portfolio Value ($)', row=1, col=2)
+fig2.update_yaxes(title_text='Frequency', row=1, col=2)
+
+fig2.update_layout(height=500, width=1400)
+
+st.plotly_chart(fig2, use_container_width=True)
+
+st.markdown(f"""
+**Simulation Statistics:**
+- Mean Final Value: **${mean_final:,.2f}**
+- VaR (95%): **${var_95:,.2f}**
+- Expected Gain: **${mean_final - initial_investment:,.2f}** ({((mean_final/initial_investment - 1) * 100):.2f}%)
+- Number of Simulations: **{int(n_sims):,}**
+- Time Horizon: **{int(time_horizon)} days**
+""")
 
 # Allocation tables
 c1, c2 = st.columns(2)
