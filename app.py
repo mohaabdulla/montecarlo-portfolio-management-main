@@ -10,6 +10,7 @@ import streamlit as st
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
 from scipy.optimize import minimize
+from scipy.stats import qmc, norm
 
 
 # ---------- Helpers ----------
@@ -114,17 +115,39 @@ def simulate_portfolios(n, mean_daily, cov_daily, rf=0.0, allow_short=False):
     return rets, vols, sharpes, weights_list
 
 
+def chol_correlated_normals_sobol(n_steps, n_sims, mean_daily, cov_daily, seed=0):
+    n_assets = len(mean_daily)
+    
+    sobol = qmc.Sobol(d=n_assets, scramble=True, seed=seed)
+    n_samples = n_steps * n_sims
+    uniform_samples = sobol.random(n_samples)
+    
+    standard_normals = norm.ppf(uniform_samples).astype(np.float32)
+    
+    L = np.linalg.cholesky(cov_daily).astype(np.float32)
+    
+    correlated_normals = standard_normals @ L.T
+    
+    mean_daily_f32 = mean_daily.astype(np.float32)
+    shocks = correlated_normals + mean_daily_f32
+    
+    shocks = shocks.reshape(n_steps, n_sims, n_assets)
+    
+    return shocks
+
+
 def run_time_series_simulation(weights, mean_daily, cov_daily, time_horizon, n_sims, initial_investment):
-    dim = len(mean_daily)
-    all_paths = np.zeros((time_horizon, n_sims))
+    weights = np.asarray(weights, dtype=np.float32)
     
-    daily_returns = np.random.multivariate_normal(mean_daily, cov_daily, size=(time_horizon, n_sims))
-    portfolio_returns = daily_returns @ weights
+    shocks = chol_correlated_normals_sobol(time_horizon, n_sims, mean_daily.astype(np.float32), cov_daily.astype(np.float32))
     
-    cumulative = np.cumprod(1 + portfolio_returns, axis=0)
-    all_paths = cumulative * initial_investment
+    port_ret = shocks @ weights
     
-    final_values = all_paths[-1, :]
+    cum = np.exp(np.cumsum(port_ret, axis=0))
+    
+    all_paths = cum * np.float32(initial_investment)
+    
+    final_values = all_paths[-1]
     
     return all_paths, final_values
 
