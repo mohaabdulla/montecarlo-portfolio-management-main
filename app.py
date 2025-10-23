@@ -83,20 +83,20 @@ def load_prices(tickers, start, end):
     return prices
 
 
-def portfolio_performance(weights, mean_daily, cov_daily, rf=0.0):
+def portfolio_performance(weights, mean_daily, cov_daily, rf=0.0, trading_periods=TRADING_DAYS):
     """
     Given weights, mean daily returns, and daily covariance:
     returns (annual_return, annual_volatility, sharpe)
     """
     weights = np.array(weights)
-    mu = np.dot(weights, mean_daily) * TRADING_DAYS
-    var = weights @ cov_daily @ weights.T * TRADING_DAYS
+    mu = np.dot(weights, mean_daily) * trading_periods
+    var = weights @ cov_daily @ weights.T * trading_periods
     vol = math.sqrt(var) if var > 0 else 0.0
     sharpe = (mu - rf) / vol if vol > 0 else 0.0
     return mu, vol, sharpe
 
 
-def simulate_portfolios(n, mean_daily, cov_daily, rf=0.0, allow_short=False):
+def simulate_portfolios(n, mean_daily, cov_daily, rf=0.0, allow_short=False, trading_periods=TRADING_DAYS):
     dim = len(mean_daily)
     
     mean_daily = mean_daily.astype(np.float32)
@@ -110,8 +110,8 @@ def simulate_portfolios(n, mean_daily, cov_daily, rf=0.0, allow_short=False):
     else:
         weights_list = np.random.dirichlet(np.ones(dim), size=n).astype(np.float32)
     
-    rets = (weights_list @ mean_daily) * TRADING_DAYS
-    vars = np.einsum('ij,jk,ik->i', weights_list, cov_daily, weights_list) * TRADING_DAYS
+    rets = (weights_list @ mean_daily) * trading_periods
+    vars = np.einsum('ij,jk,ik->i', weights_list, cov_daily, weights_list) * trading_periods
     vols = np.sqrt(np.maximum(vars, 0))
     sharpes = np.divide(rets - rf, vols, where=vols > 0, out=np.zeros_like(vols))
 
@@ -168,34 +168,34 @@ def run_time_series_simulation(weights, mean_daily, cov_daily, time_horizon, n_s
     return all_paths, final_values
 
 
-def optimize_min_variance(mean_daily, cov_daily, allow_short=False):
+def optimize_min_variance(mean_daily, cov_daily, allow_short=False, trading_periods=TRADING_DAYS):
     n = len(mean_daily)
     x0 = np.ones(n) / n
     bounds = None if allow_short else tuple((0.0, 1.0) for _ in range(n))
     cons = ({"type": "eq", "fun": lambda w: np.sum(w) - 1.0},)
 
     def obj(w):
-        return w @ cov_daily @ w * TRADING_DAYS
+        return w @ cov_daily @ w * trading_periods
 
     res = minimize(obj, x0=x0, method="SLSQP", bounds=bounds, constraints=cons)
     return res
 
 
-def optimize_max_sharpe(mean_daily, cov_daily, rf=0.0, allow_short=False):
+def optimize_max_sharpe(mean_daily, cov_daily, rf=0.0, allow_short=False, trading_periods=TRADING_DAYS):
     n = len(mean_daily)
     x0 = np.ones(n) / n
     bounds = None if allow_short else tuple((0.0, 1.0) for _ in range(n))
     cons = ({"type": "eq", "fun": lambda w: np.sum(w) - 1.0},)
 
     def neg_sharpe(w):
-        mu, vol, s = portfolio_performance(w, mean_daily, cov_daily, rf)
+        mu, vol, s = portfolio_performance(w, mean_daily, cov_daily, rf, trading_periods)
         return -s
 
     res = minimize(neg_sharpe, x0=x0, method="SLSQP", bounds=bounds, constraints=cons)
     return res
 
 
-def efficient_frontier(mean_daily, cov_daily, targets, allow_short=False):
+def efficient_frontier(mean_daily, cov_daily, targets, allow_short=False, trading_periods=TRADING_DAYS):
     """Compute minimum-variance portfolios for a range of target annual returns."""
     n = len(mean_daily)
     bounds = None if allow_short else tuple((0.0, 1.0) for _ in range(n))
@@ -205,20 +205,20 @@ def efficient_frontier(mean_daily, cov_daily, targets, allow_short=False):
     frontier_weights = []
 
     for target in targets:
-        # Convert annual target to daily target
-        daily_target = target / TRADING_DAYS
+        # Convert annual target to period target
+        period_target = target / trading_periods
 
         def obj(w):
-            return w @ cov_daily @ w * TRADING_DAYS
+            return w @ cov_daily @ w * trading_periods
 
-        def ret_constraint(w, tgt=daily_target):
+        def ret_constraint(w, tgt=period_target):
             return w @ mean_daily - tgt
 
         cons = tuple(cons_base + [{"type": "eq", "fun": ret_constraint}])
         x0 = np.ones(n) / n
         res = minimize(obj, x0=x0, method="SLSQP", bounds=bounds, constraints=cons)
         if res.success:
-            mu, vol, s = portfolio_performance(res.x, mean_daily, cov_daily, rf=0.0)
+            mu, vol, s = portfolio_performance(res.x, mean_daily, cov_daily, rf=0.0, trading_periods=trading_periods)
             frontier_vols.append(vol)
             frontier_weights.append(res.x)
         else:
@@ -267,12 +267,13 @@ with st.sidebar:
 
     n_sims = st.number_input("Number of Monte Carlo portfolios", min_value=1000, max_value=10000000, value=10000, step=1000)
     
-    time_horizon = st.number_input("Time horizon (days)", min_value=1, max_value=1000, value=252, step=1)
+    time_horizon_days = st.number_input("Time horizon (days)", min_value=3, max_value=1000, value=252, step=3)
+    time_horizon = time_horizon_days // 3
     
     initial_investment = st.number_input("Initial investment ($)", min_value=1000, max_value=10000000, value=5000000, step=1000)
 
     st.markdown("---")
-    st.caption("This version avoids slow/blocked network calls for ticker lists and uses a batched yfinance loader.")
+    st.caption("Using 3-day candles for optimized performance. Data is resampled from daily to 3-day periods.")
 
 
 if not all_tickers:
@@ -300,32 +301,45 @@ if len(assets) < 1:
     st.error("No asset has a complete price history in the selected window. Try a shorter window or different tickers.")
     st.stop()
 
+# Resample to 3-day candles for better performance
+prices_3d = prices.resample('3D').last().dropna(how="all")
+prices_3d = prices_3d.dropna(axis=1, how="any")
+
 st.subheader("Price History")
 norm_prices = prices / prices.iloc[0] * 100.0
 st.plotly_chart(px.line(norm_prices, title="Indexed Prices (100 = start)"), use_container_width=True)
 
-# Returns and stats
-returns = prices.pct_change().dropna(how="all")
-mean_daily = returns.mean().values  # vector
-cov_daily = returns.cov().values    # matrix
+# Returns and stats using 3-day data
+returns_3d = prices_3d.pct_change().dropna(how="all")
+mean_3d = returns_3d.mean().values
+cov_3d = returns_3d.cov().values
 
-col1, col2, col3 = st.columns(3)
+# Convert 3-day statistics to daily equivalent for annualization
+mean_daily = mean_3d / 3
+cov_daily = cov_3d / 3
+
+# Adjust trading days for 3-day periods
+TRADING_PERIODS_PER_YEAR = TRADING_DAYS / 3
+
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Assets", len(assets))
 with col2:
-    st.metric("Observations (days)", len(returns))
+    st.metric("Daily Observations", len(prices))
 with col3:
+    st.metric("3-Day Periods", len(returns_3d))
+with col4:
     st.metric("Period", f"{prices.index[0].date()} → {prices.index[-1].date()}")
 
 # Simulation
 with st.spinner("Running Monte Carlo simulation…"):
     sim_rets, sim_vols, sim_sharpes, sim_weights = simulate_portfolios(
-        int(n_sims), mean_daily, cov_daily, rf=rf, allow_short=allow_short
+        int(n_sims), mean_daily, cov_daily, rf=rf, allow_short=allow_short, trading_periods=TRADING_DAYS
     )
 
 # Optimization
-min_var_res = optimize_min_variance(mean_daily, cov_daily, allow_short=allow_short)
-max_sharpe_res = optimize_max_sharpe(mean_daily, cov_daily, rf=rf, allow_short=allow_short)
+min_var_res = optimize_min_variance(mean_daily, cov_daily, allow_short=allow_short, trading_periods=TRADING_DAYS)
+max_sharpe_res = optimize_max_sharpe(mean_daily, cov_daily, rf=rf, allow_short=allow_short, trading_periods=TRADING_DAYS)
 
 if not (min_var_res.success and max_sharpe_res.success):
     st.warning("Optimization did not fully converge for some targets, results may be approximate.")
@@ -333,12 +347,12 @@ if not (min_var_res.success and max_sharpe_res.success):
 w_min_var = min_var_res.x
 w_max_sharpe = max_sharpe_res.x
 
-min_mu, min_vol, min_s = portfolio_performance(w_min_var, mean_daily, cov_daily, rf)
-max_mu, max_vol, max_s = portfolio_performance(w_max_sharpe, mean_daily, cov_daily, rf)
+min_mu, min_vol, min_s = portfolio_performance(w_min_var, mean_daily, cov_daily, rf, TRADING_DAYS)
+max_mu, max_vol, max_s = portfolio_performance(w_max_sharpe, mean_daily, cov_daily, rf, TRADING_DAYS)
 
 # Efficient frontier (curve)
 target_grid = np.linspace(sim_rets.min(), sim_rets.max(), 20)
-frontier_vols, frontier_weights = efficient_frontier(mean_daily, cov_daily, target_grid, allow_short=allow_short)
+frontier_vols, frontier_weights = efficient_frontier(mean_daily, cov_daily, target_grid, allow_short=allow_short, trading_periods=TRADING_DAYS)
 
 # Plot Risk-Return
 fig = go.Figure()
@@ -431,16 +445,16 @@ elif min_var_btn:
 elif equal_weight_btn:
     selected_weights = np.ones(len(assets)) / len(assets)
     selected_name = "Equal Weight Portfolio"
-    selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf)
+    selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf, TRADING_DAYS)
 elif max_return_btn:
     idx_max_return = np.argmax(mean_daily)
     selected_weights = np.zeros(len(assets))
     selected_weights[idx_max_return] = 1.0
     selected_name = f"Maximum Return Portfolio ({assets[idx_max_return]})"
-    selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf)
+    selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf, TRADING_DAYS)
 elif balanced_btn:
     target_return = (min_mu + max_mu) / 2
-    balanced_res = optimize_min_variance(mean_daily, cov_daily, allow_short=allow_short)
+    balanced_res = optimize_min_variance(mean_daily, cov_daily, allow_short=allow_short, trading_periods=TRADING_DAYS)
     cons_balanced = (
         {"type": "eq", "fun": lambda w: np.sum(w) - 1.0},
         {"type": "eq", "fun": lambda w: np.dot(w, mean_daily) * TRADING_DAYS - target_return}
@@ -454,12 +468,12 @@ elif balanced_btn:
     if balanced_res.success:
         selected_weights = balanced_res.x
         selected_name = "Balanced Portfolio"
-        selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf)
+        selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf, TRADING_DAYS)
     else:
         st.warning("Balanced portfolio optimization failed. Using equal weights instead.")
         selected_weights = np.ones(len(assets)) / len(assets)
         selected_name = "Balanced Portfolio (Equal Weight Fallback)"
-        selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf)
+        selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf, TRADING_DAYS)
 
 if selected_weights is not None:
     with st.spinner(f"Running time series simulation for {selected_name}…"):
@@ -532,7 +546,7 @@ if selected_weights is not None:
     - VaR (95%): **${var_95:,.2f}**
     - Expected Gain: **${mean_final - initial_investment:,.2f}** ({((mean_final/initial_investment - 1) * 100):.2f}%)
     - Number of Simulations: **{int(n_sims):,}**
-    - Time Horizon: **{int(time_horizon)} days**
+    - Time Horizon: **{int(time_horizon)} 3-day periods** (~{int(time_horizon) * 3} days)
     """)
     
     del all_paths, final_values
