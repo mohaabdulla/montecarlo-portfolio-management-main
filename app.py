@@ -301,14 +301,6 @@ with col2:
 with col3:
     st.metric("Period", f"{prices.index[0].date()} → {prices.index[-1].date()}")
 
-st.markdown("### Summary (Annualized)")
-ann_mu = pd.Series(mean_daily * TRADING_DAYS, index=assets, name="Return")
-ann_vol = pd.Series(np.sqrt(np.diag(cov_daily) * TRADING_DAYS), index=assets, name="Volatility")
-summary = pd.concat([ann_mu, ann_vol], axis=1).sort_values("Return", ascending=False)
-summary["Return %"] = (summary["Return"] * 100).round(2)
-summary["Volatility %"] = (summary["Volatility"] * 100).round(2)
-st.dataframe(summary[["Return %", "Volatility %"]], use_container_width=True)
-
 # Simulation
 with st.spinner("Running Monte Carlo simulation…"):
     sim_rets, sim_vols, sim_sharpes, sim_weights = simulate_portfolios(
