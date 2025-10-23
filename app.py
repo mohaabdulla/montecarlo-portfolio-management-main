@@ -99,38 +99,52 @@ def portfolio_performance(weights, mean_daily, cov_daily, rf=0.0):
 def simulate_portfolios(n, mean_daily, cov_daily, rf=0.0, allow_short=False):
     dim = len(mean_daily)
     
+    mean_daily = mean_daily.astype(np.float32)
+    cov_daily = cov_daily.astype(np.float32)
+    
     if allow_short:
-        weights_list = np.random.normal(size=(n, dim))
+        weights_list = np.random.normal(size=(n, dim)).astype(np.float32)
         sums = weights_list.sum(axis=1, keepdims=True)
         sums[np.abs(sums) < 1e-10] = 1.0
         weights_list = weights_list / sums
     else:
-        weights_list = np.random.dirichlet(np.ones(dim), size=n)
+        weights_list = np.random.dirichlet(np.ones(dim), size=n).astype(np.float32)
     
-    rets = np.dot(weights_list, mean_daily) * TRADING_DAYS
-    vars = np.sum(weights_list @ cov_daily * weights_list, axis=1) * TRADING_DAYS
+    rets = (weights_list @ mean_daily) * TRADING_DAYS
+    vars = np.einsum('ij,jk,ik->i', weights_list, cov_daily, weights_list) * TRADING_DAYS
     vols = np.sqrt(np.maximum(vars, 0))
     sharpes = np.divide(rets - rf, vols, where=vols > 0, out=np.zeros_like(vols))
 
     return rets, vols, sharpes, weights_list
 
 
-def chol_correlated_normals_sobol(n_steps, n_sims, mean_daily, cov_daily, seed=0):
+@st.cache_data(ttl=3600)
+def chol_correlated_normals_sobol(n_steps, n_sims, mean_daily_tuple, cov_daily_tuple, seed=0):
+    mean_daily = np.array(mean_daily_tuple, dtype=np.float32)
+    cov_daily = np.array(cov_daily_tuple, dtype=np.float32)
     n_assets = len(mean_daily)
     
     sobol = qmc.Sobol(d=n_assets, scramble=True, seed=seed)
     n_samples = n_steps * n_sims
-    uniform_samples = sobol.random(n_samples)
     
-    standard_normals = norm.ppf(uniform_samples).astype(np.float32)
+    batch_size = 100000
+    shocks_list = []
     
-    L = np.linalg.cholesky(cov_daily).astype(np.float32)
+    for i in range(0, n_samples, batch_size):
+        batch_end = min(i + batch_size, n_samples)
+        batch_samples = batch_end - i
+        
+        uniform_samples = sobol.random(batch_samples)
+        standard_normals = norm.ppf(uniform_samples).astype(np.float16)
+        
+        if i == 0:
+            L = np.linalg.cholesky(cov_daily).astype(np.float16)
+        
+        correlated_normals = standard_normals @ L.T
+        shocks_batch = correlated_normals + mean_daily.astype(np.float16)
+        shocks_list.append(shocks_batch)
     
-    correlated_normals = standard_normals @ L.T
-    
-    mean_daily_f32 = mean_daily.astype(np.float32)
-    shocks = correlated_normals + mean_daily_f32
-    
+    shocks = np.vstack(shocks_list).astype(np.float32)
     shocks = shocks.reshape(n_steps, n_sims, n_assets)
     
     return shocks
@@ -138,10 +152,12 @@ def chol_correlated_normals_sobol(n_steps, n_sims, mean_daily, cov_daily, seed=0
 
 def run_time_series_simulation(weights, mean_daily, cov_daily, time_horizon, n_sims, initial_investment):
     weights = np.asarray(weights, dtype=np.float32)
+    mean_daily_tuple = tuple(mean_daily.astype(np.float32).tolist())
+    cov_daily_tuple = tuple(map(tuple, cov_daily.astype(np.float32).tolist()))
     
-    shocks = chol_correlated_normals_sobol(time_horizon, n_sims, mean_daily.astype(np.float32), cov_daily.astype(np.float32))
+    shocks = chol_correlated_normals_sobol(time_horizon, n_sims, mean_daily_tuple, cov_daily_tuple)
     
-    port_ret = shocks @ weights
+    port_ret = np.einsum('ijk,k->ij', shocks, weights)
     
     cum = np.exp(np.cumsum(port_ret, axis=0))
     
@@ -220,7 +236,7 @@ def format_weights(weights, labels):
 
 # ---------- Streamlit UI ----------
 st.set_page_config(page_title="Monte Carlo Portfolio", layout="wide")
-st.title("📈 Monte Carlo Portfolio Simulator (Fast Deploy)")
+st.title("📈 Monte Carlo Portfolio Simulator")
 
 with st.sidebar:
     st.header("Inputs")
@@ -321,20 +337,23 @@ min_mu, min_vol, min_s = portfolio_performance(w_min_var, mean_daily, cov_daily,
 max_mu, max_vol, max_s = portfolio_performance(w_max_sharpe, mean_daily, cov_daily, rf)
 
 # Efficient frontier (curve)
-target_grid = np.linspace(sim_rets.min(), sim_rets.max(), 40)
+target_grid = np.linspace(sim_rets.min(), sim_rets.max(), 20)
 frontier_vols, frontier_weights = efficient_frontier(mean_daily, cov_daily, target_grid, allow_short=allow_short)
 
 # Plot Risk-Return
 fig = go.Figure()
 
+sample_size = min(5000, len(sim_vols))
+sample_indices = np.random.choice(len(sim_vols), sample_size, replace=False)
+
 fig.add_trace(
-    go.Scatter(
-        x=sim_vols,
-        y=sim_rets,
+    go.Scattergl(
+        x=sim_vols[sample_indices],
+        y=sim_rets[sample_indices],
         mode="markers",
         name="Simulations",
         opacity=0.4,
-        marker=dict(size=5),
+        marker=dict(size=3),
         hovertemplate="Vol: %{x:.2%}<br>Ret: %{y:.2%}<extra></extra>",
     )
 )
@@ -459,17 +478,20 @@ if selected_weights is not None:
         subplot_titles=('Monte Carlo Simulation - Cumulative Returns', 'Distribution of Final Portfolio Values')
     )
 
-    num_paths_to_plot = min(100, int(n_sims))
+    num_paths_to_plot = min(50, int(n_sims))
     time_steps = np.arange(int(time_horizon))
-    for i in range(num_paths_to_plot):
+    
+    indices = np.linspace(0, int(n_sims) - 1, num_paths_to_plot, dtype=int)
+    
+    for idx in indices:
         fig2.add_trace(
-            go.Scatter(
+            go.Scattergl(
                 x=time_steps,
-                y=all_paths[:, i],
+                y=all_paths[:, idx],
                 mode='lines',
-                line=dict(width=1),
+                line=dict(width=0.8),
                 showlegend=False,
-                opacity=0.6
+                opacity=0.5
             ),
             row=1, col=1
         )
@@ -477,12 +499,15 @@ if selected_weights is not None:
     fig2.update_xaxes(title_text='Time Steps', row=1, col=1)
     fig2.update_yaxes(title_text='Portfolio Value ($)', row=1, col=1)
 
-    mean_final = np.mean(final_values)
-    var_95 = np.percentile(final_values, 5)
+    mean_final = float(np.mean(final_values))
+    var_95 = float(np.percentile(final_values, 5))
+    
+    hist_sample_size = min(10000, len(final_values))
+    hist_indices = np.random.choice(len(final_values), hist_sample_size, replace=False)
 
     fig2.add_trace(
         go.Histogram(
-            x=final_values,
+            x=final_values[hist_indices],
             nbinsx=50,
             marker_color='blue',
             opacity=0.75,
@@ -509,6 +534,10 @@ if selected_weights is not None:
     - Number of Simulations: **{int(n_sims):,}**
     - Time Horizon: **{int(time_horizon)} days**
     """)
+    
+    del all_paths, final_values
+    import gc
+    gc.collect()
 else:
     st.info("👆 Click a button above to run the Monte Carlo simulation for your chosen portfolio strategy.")
 
