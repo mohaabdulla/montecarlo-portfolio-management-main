@@ -557,7 +557,7 @@ else:
 
 # Correlation heatmap
 st.markdown("### Asset Return Correlations")
-corr = returns[assets].corr()
+corr = returns_3d[assets].corr()
 st.plotly_chart(px.imshow(corr, text_auto=True, aspect="auto", title="Correlation Matrix"), use_container_width=True)
 
 # Downloads
