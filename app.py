@@ -267,13 +267,13 @@ with st.sidebar:
 
     n_sims = st.number_input("Number of Monte Carlo portfolios", min_value=1000, max_value=10000000, value=10000, step=1000)
     
-    time_horizon_days = st.number_input("Time horizon (days)", min_value=3, max_value=1000, value=252, step=3)
-    time_horizon = time_horizon_days // 3
+    time_horizon_weeks = st.number_input("Time horizon (weeks)", min_value=1, max_value=260, value=52, step=1)
+    time_horizon = int(time_horizon_weeks)
     
     initial_investment = st.number_input("Initial investment ($)", min_value=1000, max_value=10000000, value=5000000, step=1000)
 
     st.markdown("---")
-    st.caption("Using 3-day candles for optimized performance. Data is resampled from daily to 3-day periods.")
+    st.caption("Using weekly candles for optimized performance. Data is resampled from daily to weekly periods.")
 
 
 if not all_tickers:
@@ -301,25 +301,25 @@ if len(assets) < 1:
     st.error("No asset has a complete price history in the selected window. Try a shorter window or different tickers.")
     st.stop()
 
-# Resample to 3-day candles for better performance
-prices_3d = prices.resample('3D').last().dropna(how="all")
-prices_3d = prices_3d.dropna(axis=1, how="any")
+# Resample to 1-week candles for better performance
+prices_weekly = prices.resample('W').last().dropna(how="all")
+prices_weekly = prices_weekly.dropna(axis=1, how="any")
 
 st.subheader("Price History")
 norm_prices = prices / prices.iloc[0] * 100.0
 st.plotly_chart(px.line(norm_prices, title="Indexed Prices (100 = start)"), use_container_width=True)
 
-# Returns and stats using 3-day data
-returns_3d = prices_3d.pct_change().dropna(how="all")
-mean_3d = returns_3d.mean().values
-cov_3d = returns_3d.cov().values
+# Returns and stats using weekly data
+returns_weekly = prices_weekly.pct_change().dropna(how="all")
+mean_weekly = returns_weekly.mean().values
+cov_weekly = returns_weekly.cov().values
 
-# Convert 3-day statistics to daily equivalent for annualization
-mean_daily = mean_3d / 3
-cov_daily = cov_3d / 3
+# Convert weekly statistics to daily equivalent for annualization
+mean_daily = mean_weekly / 7
+cov_daily = cov_weekly / 7
 
-# Adjust trading days for 3-day periods
-TRADING_PERIODS_PER_YEAR = TRADING_DAYS / 3
+# Adjust trading days for weekly periods (52 weeks per year)
+TRADING_PERIODS_PER_YEAR = 52
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -327,7 +327,7 @@ with col1:
 with col2:
     st.metric("Daily Observations", len(prices))
 with col3:
-    st.metric("3-Day Periods", len(returns_3d))
+    st.metric("Weekly Periods", len(returns_weekly))
 with col4:
     st.metric("Period", f"{prices.index[0].date()} → {prices.index[-1].date()}")
 
@@ -546,7 +546,7 @@ if selected_weights is not None:
     - VaR (95%): **${var_95:,.2f}**
     - Expected Gain: **${mean_final - initial_investment:,.2f}** ({((mean_final/initial_investment - 1) * 100):.2f}%)
     - Number of Simulations: **{int(n_sims):,}**
-    - Time Horizon: **{int(time_horizon)} 3-day periods** (~{int(time_horizon) * 3} days)
+    - Time Horizon: **{int(time_horizon)} weeks** (~{int(time_horizon * 7)} days)
     """)
     
     del all_paths, final_values
@@ -557,7 +557,7 @@ else:
 
 # Correlation heatmap
 st.markdown("### Asset Return Correlations")
-corr = returns_3d[assets].corr()
+corr = returns_weekly[assets].corr()
 st.plotly_chart(px.imshow(corr, text_auto=True, aspect="auto", title="Correlation Matrix"), use_container_width=True)
 
 # Downloads
