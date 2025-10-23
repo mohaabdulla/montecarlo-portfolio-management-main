@@ -387,69 +387,6 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# Time series simulation for Max Sharpe portfolio
-st.markdown("### Monte Carlo Simulation - Portfolio Value Over Time")
-with st.spinner("Running time series simulation for Max Sharpe portfolio…"):
-    all_paths, final_values = run_time_series_simulation(
-        w_max_sharpe, mean_daily, cov_daily, int(time_horizon), int(n_sims), initial_investment
-    )
-
-fig2 = make_subplots(
-    rows=1, cols=2,
-    subplot_titles=('Monte Carlo Simulation - Cumulative Returns', 'Distribution of Final Portfolio Values')
-)
-
-num_paths_to_plot = min(100, int(n_sims))
-time_steps = np.arange(int(time_horizon))
-for i in range(num_paths_to_plot):
-    fig2.add_trace(
-        go.Scatter(
-            x=time_steps,
-            y=all_paths[:, i],
-            mode='lines',
-            line=dict(width=1),
-            showlegend=False,
-            opacity=0.6
-        ),
-        row=1, col=1
-    )
-
-fig2.update_xaxes(title_text='Time Steps', row=1, col=1)
-fig2.update_yaxes(title_text='Portfolio Value ($)', row=1, col=1)
-
-mean_final = np.mean(final_values)
-var_95 = np.percentile(final_values, 5)
-
-fig2.add_trace(
-    go.Histogram(
-        x=final_values,
-        nbinsx=50,
-        marker_color='blue',
-        opacity=0.75,
-        showlegend=False
-    ),
-    row=1, col=2
-)
-
-fig2.add_vline(x=mean_final, line=dict(color='red', dash='dash'), row=1, col=2)
-fig2.add_vline(x=var_95, line=dict(color='green', dash='dash'), row=1, col=2)
-
-fig2.update_xaxes(title_text='Final Portfolio Value ($)', row=1, col=2)
-fig2.update_yaxes(title_text='Frequency', row=1, col=2)
-
-fig2.update_layout(height=500, width=1400)
-
-st.plotly_chart(fig2, use_container_width=True)
-
-st.markdown(f"""
-**Simulation Statistics:**
-- Mean Final Value: **${mean_final:,.2f}**
-- VaR (95%): **${var_95:,.2f}**
-- Expected Gain: **${mean_final - initial_investment:,.2f}** ({((mean_final/initial_investment - 1) * 100):.2f}%)
-- Number of Simulations: **{int(n_sims):,}**
-- Time Horizon: **{int(time_horizon)} days**
-""")
-
 # Allocation tables
 c1, c2 = st.columns(2)
 with c1:
@@ -465,6 +402,139 @@ with c2:
         f"Return: **{min_mu:.2%}**, Volatility: **{min_vol:.2%}**, Sharpe: **{min_s:.2f}** (rf={rf_percent:.2f}%)"
     )
     st.dataframe(format_weights(w_min_var, assets), use_container_width=True)
+
+# Portfolio strategy selection
+st.markdown("---")
+st.markdown("### Monte Carlo Simulation - Portfolio Value Over Time")
+st.write("Select a portfolio strategy to run the time series simulation:")
+
+col_a, col_b, col_c, col_d, col_e = st.columns(5)
+
+with col_a:
+    max_sharpe_btn = st.button("Max Sharpe Portfolio", use_container_width=True)
+with col_b:
+    min_var_btn = st.button("Minimum Variance Portfolio", use_container_width=True)
+with col_c:
+    equal_weight_btn = st.button("Equal Weight Portfolio", use_container_width=True)
+with col_d:
+    max_return_btn = st.button("Maximum Return Portfolio", use_container_width=True)
+with col_e:
+    balanced_btn = st.button("Balanced Portfolio", use_container_width=True)
+
+selected_weights = None
+selected_name = None
+selected_perf = None
+
+if max_sharpe_btn:
+    selected_weights = w_max_sharpe
+    selected_name = "Max Sharpe Portfolio"
+    selected_perf = (max_mu, max_vol, max_s)
+elif min_var_btn:
+    selected_weights = w_min_var
+    selected_name = "Minimum Variance Portfolio"
+    selected_perf = (min_mu, min_vol, min_s)
+elif equal_weight_btn:
+    selected_weights = np.ones(len(assets)) / len(assets)
+    selected_name = "Equal Weight Portfolio"
+    selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf)
+elif max_return_btn:
+    idx_max_return = np.argmax(mean_daily)
+    selected_weights = np.zeros(len(assets))
+    selected_weights[idx_max_return] = 1.0
+    selected_name = f"Maximum Return Portfolio ({assets[idx_max_return]})"
+    selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf)
+elif balanced_btn:
+    target_return = (min_mu + max_mu) / 2
+    balanced_res = optimize_min_variance(mean_daily, cov_daily, allow_short=allow_short)
+    cons_balanced = (
+        {"type": "eq", "fun": lambda w: np.sum(w) - 1.0},
+        {"type": "eq", "fun": lambda w: np.dot(w, mean_daily) * TRADING_DAYS - target_return}
+    )
+    n = len(mean_daily)
+    x0 = np.ones(n) / n
+    bounds = None if allow_short else tuple((0.0, 1.0) for _ in range(n))
+    def obj_bal(w):
+        return w @ cov_daily @ w * TRADING_DAYS
+    balanced_res = minimize(obj_bal, x0=x0, method="SLSQP", bounds=bounds, constraints=cons_balanced)
+    if balanced_res.success:
+        selected_weights = balanced_res.x
+        selected_name = "Balanced Portfolio"
+        selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf)
+    else:
+        st.warning("Balanced portfolio optimization failed. Using equal weights instead.")
+        selected_weights = np.ones(len(assets)) / len(assets)
+        selected_name = "Balanced Portfolio (Equal Weight Fallback)"
+        selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf)
+
+if selected_weights is not None:
+    with st.spinner(f"Running time series simulation for {selected_name}…"):
+        all_paths, final_values = run_time_series_simulation(
+            selected_weights, mean_daily, cov_daily, int(time_horizon), int(n_sims), initial_investment
+        )
+    
+    st.markdown(f"#### Selected Strategy: {selected_name}")
+    st.write(
+        f"Return: **{selected_perf[0]:.2%}**, Volatility: **{selected_perf[1]:.2%}**, Sharpe: **{selected_perf[2]:.2f}** (rf={rf_percent:.2f}%)"
+    )
+    st.dataframe(format_weights(selected_weights, assets), use_container_width=True)
+    
+    fig2 = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=('Monte Carlo Simulation - Cumulative Returns', 'Distribution of Final Portfolio Values')
+    )
+
+    num_paths_to_plot = min(100, int(n_sims))
+    time_steps = np.arange(int(time_horizon))
+    for i in range(num_paths_to_plot):
+        fig2.add_trace(
+            go.Scatter(
+                x=time_steps,
+                y=all_paths[:, i],
+                mode='lines',
+                line=dict(width=1),
+                showlegend=False,
+                opacity=0.6
+            ),
+            row=1, col=1
+        )
+
+    fig2.update_xaxes(title_text='Time Steps', row=1, col=1)
+    fig2.update_yaxes(title_text='Portfolio Value ($)', row=1, col=1)
+
+    mean_final = np.mean(final_values)
+    var_95 = np.percentile(final_values, 5)
+
+    fig2.add_trace(
+        go.Histogram(
+            x=final_values,
+            nbinsx=50,
+            marker_color='blue',
+            opacity=0.75,
+            showlegend=False
+        ),
+        row=1, col=2
+    )
+
+    fig2.add_vline(x=mean_final, line=dict(color='red', dash='dash'), row=1, col=2)
+    fig2.add_vline(x=var_95, line=dict(color='green', dash='dash'), row=1, col=2)
+
+    fig2.update_xaxes(title_text='Final Portfolio Value ($)', row=1, col=2)
+    fig2.update_yaxes(title_text='Frequency', row=1, col=2)
+
+    fig2.update_layout(height=500, width=1400)
+
+    st.plotly_chart(fig2, use_container_width=True)
+
+    st.markdown(f"""
+    **Simulation Statistics:**
+    - Mean Final Value: **${mean_final:,.2f}**
+    - VaR (95%): **${var_95:,.2f}**
+    - Expected Gain: **${mean_final - initial_investment:,.2f}** ({((mean_final/initial_investment - 1) * 100):.2f}%)
+    - Number of Simulations: **{int(n_sims):,}**
+    - Time Horizon: **{int(time_horizon)} days**
+    """)
+else:
+    st.info("👆 Click a button above to run the Monte Carlo simulation for your chosen portfolio strategy.")
 
 # Correlation heatmap
 st.markdown("### Asset Return Correlations")
