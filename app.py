@@ -387,22 +387,6 @@ fig.update_layout(
 )
 st.plotly_chart(fig, use_container_width=True)
 
-# Allocation tables
-c1, c2 = st.columns(2)
-with c1:
-    st.markdown("#### Max Sharpe Portfolio")
-    st.write(
-        f"Return: **{max_mu:.2%}**, Volatility: **{max_vol:.2%}**, Sharpe: **{max_s:.2f}** (rf={rf_percent:.2f}%)"
-    )
-    st.dataframe(format_weights(w_max_sharpe, assets), use_container_width=True)
-
-with c2:
-    st.markdown("#### Minimum Variance Portfolio")
-    st.write(
-        f"Return: **{min_mu:.2%}**, Volatility: **{min_vol:.2%}**, Sharpe: **{min_s:.2f}** (rf={rf_percent:.2f}%)"
-    )
-    st.dataframe(format_weights(w_min_var, assets), use_container_width=True)
-
 # Portfolio strategy selection
 st.markdown("---")
 st.markdown("### Monte Carlo Simulation - Portfolio Value Over Time")
