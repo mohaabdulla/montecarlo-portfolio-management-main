@@ -19,9 +19,10 @@ TIME_HORIZON = 252
 # Risk-free rate for Sharpe Ratio calculation
 RISK_FREE_RATE = 0.02
 
-# Custom weights for each stock (should sum to 1)
+# Custom weights for each stock (should sum to 1 or will be normalized)
 # If None, equal weights are assumed unless optimization is used
-WEIGHTS = None  # Example: [0.4, 0.3, 0.3]
+# Must have same length as TICKERS list and correspond to each ticker in order
+WEIGHTS = None  # Example: [0.4, 0.3, 0.3] for AAPL=40%, MSFT=30%, GOOG=30%
 
 # Optimization settings
 OPTIMIZE = True  # Set to True to optimize the portfolio, False to use provided weights

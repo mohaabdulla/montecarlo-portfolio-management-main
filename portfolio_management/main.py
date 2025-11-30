@@ -55,8 +55,15 @@ def main():
         display_optimal_weights(stock_data.columns, optimal_weights)
         weights = optimal_weights
     elif custom_weights:
-        weights = custom_weights
-        print("\nUsing Custom Weights:")
+        # Validate custom weights
+        if len(custom_weights) != len(expected_returns):
+            raise ValueError(f"Number of custom weights ({len(custom_weights)}) must match number of assets ({len(expected_returns)})")
+        
+        # Normalize weights to sum to 1
+        weights = [w / sum(custom_weights) for w in custom_weights]
+        print("\nUsing Custom Weights (Normalized):")
+        print(f"Original weights: {custom_weights}")
+        print(f"Sum of weights: {sum(custom_weights):.4f} → 1.0000")
         display_optimal_weights(stock_data.columns, weights)
     else:
         num_assets = len(expected_returns)

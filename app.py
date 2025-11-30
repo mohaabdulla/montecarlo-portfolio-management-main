@@ -417,7 +417,7 @@ st.markdown("---")
 st.markdown("### Monte Carlo Simulation - Portfolio Value Over Time")
 st.write("Select a portfolio strategy to run the time series simulation:")
 
-col_a, col_b, col_c, col_d, col_e = st.columns(5)
+col_a, col_b, col_c, col_d, col_e, col_f = st.columns(6)
 
 with col_a:
     max_sharpe_btn = st.button("Max Sharpe Portfolio", use_container_width=True)
@@ -429,10 +429,70 @@ with col_d:
     max_return_btn = st.button("Maximum Return Portfolio", use_container_width=True)
 with col_e:
     balanced_btn = st.button("Balanced Portfolio", use_container_width=True)
+with col_f:
+    custom_weight_btn = st.button("Custom Weights", use_container_width=True)
 
 selected_weights = None
 selected_name = None
 selected_perf = None
+
+# Initialize custom weights in session state
+if 'custom_weights_input' not in st.session_state:
+    st.session_state.custom_weights_input = {asset: 1.0/len(assets) for asset in assets}
+if 'show_custom_weights' not in st.session_state:
+    st.session_state.show_custom_weights = False
+
+if custom_weight_btn:
+    st.session_state.show_custom_weights = True
+
+# Display custom weights input form
+if st.session_state.show_custom_weights:
+    st.markdown("#### Enter Custom Portfolio Weights")
+    st.write("Specify the weight (allocation %) for each asset. Weights will be normalized to sum to 1.")
+    
+    # Create input fields for each asset
+    weight_cols = st.columns(min(3, len(assets)))
+    col_idx = 0
+    
+    for asset in assets:
+        with weight_cols[col_idx % len(weight_cols)]:
+            st.session_state.custom_weights_input[asset] = st.number_input(
+                f"{asset} weight",
+                min_value=0.0 if not allow_short else -1.0,
+                max_value=1.0,
+                value=float(st.session_state.custom_weights_input.get(asset, 1.0/len(assets))),
+                step=0.01,
+                format="%.4f",
+                key=f"weight_{asset}"
+            )
+        col_idx += 1
+    
+    # Buttons for custom weights
+    col_submit, col_cancel = st.columns([1, 1])
+    with col_submit:
+        submit_custom = st.button("Run Custom Portfolio", type="primary", use_container_width=True)
+    with col_cancel:
+        cancel_custom = st.button("Cancel", use_container_width=True)
+    
+    if cancel_custom:
+        st.session_state.show_custom_weights = False
+        st.rerun()
+    
+    if submit_custom:
+        # Normalize weights to sum to 1
+        custom_weights_array = np.array([st.session_state.custom_weights_input[asset] for asset in assets])
+        weight_sum = custom_weights_array.sum()
+        
+        if weight_sum <= 0:
+            st.error("Error: Total weight must be greater than 0.")
+        else:
+            custom_weights_array = custom_weights_array / weight_sum
+            selected_weights = custom_weights_array
+            selected_name = "Custom Portfolio"
+            selected_perf = portfolio_performance(selected_weights, mean_daily, cov_daily, rf, TRADING_DAYS)
+            st.session_state.show_custom_weights = False
+            
+            st.success(f"✓ Weights normalized. Total: {weight_sum:.4f} → 1.0000")
 
 if max_sharpe_btn:
     selected_weights = w_max_sharpe
