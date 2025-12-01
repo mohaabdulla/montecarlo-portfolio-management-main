@@ -89,6 +89,70 @@ def get_simulation_insights(sim_results, initial_investment):
     }
     return insights
 
+def print_simulation_insights(sim_results, initial_investment):
+    """Print simulation insights to console"""
+    insights = get_simulation_insights(sim_results, initial_investment)
+    
+    # Calculate expected return
+    mean_return = np.mean(sim_results)
+    expected_return = ((mean_return / initial_investment) - 1) * 100
+    num_losses = np.sum(sim_results < initial_investment)
+    total_sims = len(sim_results)
+    
+    print("\n" + "="*60)
+    print("SIMULATION RESULTS")
+    print("="*60)
+    
+    for key, value in insights.items():
+        print(f"{key:45s}: {value}")
+    
+    print(f"\n{'Expected Return':45s}: {expected_return:.2f}%")
+    print(f"{'Number of Loss Scenarios':45s}: {num_losses:,} out of {total_sims:,}")
+    print("="*60 + "\n")
+    
+    return insights
+
+def plot_simulation_results(all_cumulative_returns, final_portfolio_values):
+    """Plot simulation results (for non-Streamlit environments)"""
+    try:
+        import matplotlib.pyplot as plt
+        
+        # Plot cumulative return paths
+        num_simulations_to_plot = min(100, all_cumulative_returns.shape[1])
+        time_steps = np.arange(all_cumulative_returns.shape[0])
+        
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+        
+        # Cumulative Returns Plot
+        for i in range(num_simulations_to_plot):
+            ax1.plot(time_steps, all_cumulative_returns[:, i], alpha=0.3, linewidth=0.5)
+        ax1.set_xlabel('Time Steps')
+        ax1.set_ylabel('Portfolio Value ($)')
+        ax1.set_title('Monte Carlo Simulation - Cumulative Returns')
+        ax1.grid(True, alpha=0.3)
+        
+        # Histogram of Final Portfolio Values
+        ax2.hist(final_portfolio_values, bins=50, color='blue', alpha=0.75, edgecolor='black')
+        mean_value = np.mean(final_portfolio_values)
+        var_95 = np.percentile(final_portfolio_values, 5)
+        
+        ax2.axvline(mean_value, color='red', linestyle='--', linewidth=2, label=f'Mean: ${mean_value:,.0f}')
+        ax2.axvline(var_95, color='green', linestyle='--', linewidth=2, label=f'VaR 95%: ${var_95:,.0f}')
+        ax2.set_xlabel('Final Portfolio Value ($)')
+        ax2.set_ylabel('Frequency')
+        ax2.set_title('Distribution of Final Portfolio Values')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
+        
+    except ImportError:
+        print("Matplotlib not available. Skipping plot generation.")
+        print(f"Mean Final Value: ${np.mean(final_portfolio_values):,.2f}")
+        print(f"VaR (95%): ${np.percentile(final_portfolio_values, 5):,.2f}")
+
+
 def display_optimal_weights(tickers, weights, streamlit_display=True):
     weights_df = pd.DataFrame({"Ticker": tickers, "Weight": weights})
     if streamlit_display:

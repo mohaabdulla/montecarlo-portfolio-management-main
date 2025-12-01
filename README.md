@@ -5,6 +5,7 @@ This project leverages Monte Carlo simulations to optimize investment portfolio 
 
 ## 🚀 **Key Features**
 - **Monte Carlo Simulation**: Uses random sampling to generate thousands of portfolio weight combinations for optimal allocation.
+- **Expected Return & Probability of Loss**: Calculate and display expected returns (annualized and period-based) and probability of losing money.
 - **Automated Portfolio Analysis**: Automatically calculates key metrics like sector weights, expected returns, and VaR for each sector and ticker.
 - **User-Friendly GUI**: Provides a visual interface to input, update, and analyze portfolio data.
 - **Custom Portfolio Weights**: Users can manually specify their desired portfolio allocation weights for each asset.

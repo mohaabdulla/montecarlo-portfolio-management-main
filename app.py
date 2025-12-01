@@ -541,9 +541,29 @@ if selected_weights is not None:
             selected_weights, mean_daily, cov_daily, int(time_horizon), int(n_sims), initial_investment
         )
     
+    # Calculate key metrics early
+    mean_final = float(np.mean(final_values))
+    num_losses = np.sum(final_values < initial_investment)
+    prob_loss = (num_losses / len(final_values)) * 100
+    expected_return_sim = ((mean_final / initial_investment) - 1) * 100
+    years = time_horizon / 52
+    annualized_return_sim = (((mean_final / initial_investment) ** (1 / years)) - 1) * 100 if years > 0 else expected_return_sim
+    
     st.markdown(f"#### Selected Strategy: {selected_name}")
+    
+    # Display key metrics in columns
+    met_col1, met_col2, met_col3, met_col4 = st.columns(4)
+    with met_col1:
+        st.metric("Expected Return (Annualized)", f"{annualized_return_sim:.2f}%")
+    with met_col2:
+        st.metric("Probability of Loss", f"{prob_loss:.2f}%", delta=f"{100-prob_loss:.1f}% win rate", delta_color="inverse")
+    with met_col3:
+        st.metric("Volatility", f"{selected_perf[1]:.2%}")
+    with met_col4:
+        st.metric("Sharpe Ratio", f"{selected_perf[2]:.2f}")
+    
     st.write(
-        f"Return: **{selected_perf[0]:.2%}**, Volatility: **{selected_perf[1]:.2%}**, Sharpe: **{selected_perf[2]:.2f}** (rf={rf_percent:.2f}%)"
+        f"Theoretical Return: **{selected_perf[0]:.2%}** | Simulated Return: **{expected_return_sim:.2f}%** (over {years:.2f} years)"
     )
     st.dataframe(format_weights(selected_weights, assets), use_container_width=True)
     
@@ -573,7 +593,6 @@ if selected_weights is not None:
     fig2.update_xaxes(title_text='Time Steps', row=1, col=1)
     fig2.update_yaxes(title_text='Portfolio Value ($)', row=1, col=1)
 
-    mean_final = float(np.mean(final_values))
     var_95 = float(np.percentile(final_values, 5))
     
     hist_sample_size = min(10000, len(final_values))
@@ -592,6 +611,7 @@ if selected_weights is not None:
 
     fig2.add_vline(x=mean_final, line=dict(color='red', dash='dash'), row=1, col=2)
     fig2.add_vline(x=var_95, line=dict(color='green', dash='dash'), row=1, col=2)
+    fig2.add_vline(x=initial_investment, line=dict(color='orange', dash='dot'), row=1, col=2)
 
     fig2.update_xaxes(title_text='Final Portfolio Value ($)', row=1, col=2)
     fig2.update_yaxes(title_text='Frequency', row=1, col=2)
@@ -599,14 +619,21 @@ if selected_weights is not None:
     fig2.update_layout(height=500, width=1400)
 
     st.plotly_chart(fig2, use_container_width=True)
+    
+    # Add legend for the chart lines
+    st.caption("📊 Chart Legend: 🔴 Red dashed line = Mean final value | 🟢 Green dashed line = VaR (5th percentile) | 🟠 Orange dotted line = Initial investment (break-even)")
 
     st.markdown(f"""
     **Simulation Statistics:**
     - Mean Final Value: **${mean_final:,.2f}**
-    - VaR (95%): **${var_95:,.2f}**
-    - Expected Gain: **${mean_final - initial_investment:,.2f}** ({((mean_final/initial_investment - 1) * 100):.2f}%)
+    - Initial Investment: **${initial_investment:,.2f}**
+    - Expected Gain: **${mean_final - initial_investment:,.2f}** ({expected_return_sim:.2f}%)
+    - **Expected Return (Period): {expected_return_sim:.2f}%**
+    - **Expected Annualized Return: {annualized_return_sim:.2f}%**
+    - **Probability of Loss: {prob_loss:.2f}%** ({num_losses:,} out of {int(n_sims):,} simulations)
+    - VaR (95%): **${var_95:,.2f}** (worst 5% of outcomes)
     - Number of Simulations: **{int(n_sims):,}**
-    - Time Horizon: **{int(time_horizon)} weeks** (~{int(time_horizon * 7)} days)
+    - Time Horizon: **{int(time_horizon)} weeks** (~{int(time_horizon * 7)} days, {years:.2f} years)
     """)
     
     del all_paths, final_values
