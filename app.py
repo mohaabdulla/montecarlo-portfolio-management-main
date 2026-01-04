@@ -1,3 +1,36 @@
+"""
+Monte Carlo Portfolio Simulator - Streamlit Web Application
+
+This is an interactive web application for Monte Carlo portfolio simulation and optimization.
+It allows users to:
+
+1. Select multiple stock tickers and date ranges
+2. Download historical price data
+3. Run Monte Carlo simulations (thousands of possible portfolio paths)
+4. Find optimal portfolios (maximum Sharpe ratio or minimum volatility)
+5. Visualize results with interactive charts
+
+Key Features:
+- Real-time data download from Yahoo Finance
+- Efficient numerical computation (vectorized NumPy, Sobol sequences)
+- Interactive risk-return visualization
+- Customizable simulation parameters
+- Multiple optimization strategies
+
+Technology Stack:
+- Streamlit: Web UI framework
+- Plotly: Interactive charts
+- NumPy/Pandas: Data processing
+- SciPy: Optimization and statistical functions
+- yfinance: Stock data
+
+Usage:
+    streamlit run app.py
+
+This application uses weekly resampled data for better computational performance
+while maintaining statistical accuracy.
+"""
+
 import math
 from datetime import date, timedelta
 
@@ -13,20 +46,43 @@ from scipy.optimize import minimize
 from scipy.stats import qmc, norm
 
 
-# ---------- Helpers ----------
-TRADING_DAYS = 252
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+TRADING_DAYS = 252  # Standard number of trading days per year
 
 
 def normalize_tickers(tickers):
-    """Normalize user tickers to yfinance format (e.g., BRK.B -> BRK-B)."""
+    """
+    Normalize user tickers to yfinance format.
+    
+    yfinance expects hyphens instead of periods for certain tickers:
+    Example: BRK.B → BRK-B
+    
+    Args:
+        tickers: List of ticker strings
+    
+    Returns:
+        List of normalized, uppercase ticker symbols
+    """
     return [t.replace(".", "-").strip().upper() for t in tickers if t.strip()]
 
 
 def load_prices(tickers, start, end):
     """
-    Batched yfinance download with robust handling of single/multi-index outputs.
-    Uses auto_adjust=True (so 'Close' is adjusted) and falls back from 'Adj Close' to 'Close'.
-    Returns a DataFrame with columns per original user ticker.
+    Download historical stock prices from Yahoo Finance.
+    
+    Handles both single and multiple ticker downloads efficiently.
+    Extracts adjusted closing prices and aligns the data.
+    
+    Args:
+        tickers: List of ticker symbols
+        start: Start date
+        end: End date
+    
+    Returns:
+        DataFrame with historical prices (index: date, columns: tickers)
     """
     if not tickers:
         return pd.DataFrame()
@@ -85,8 +141,22 @@ def load_prices(tickers, start, end):
 
 def portfolio_performance(weights, mean_daily, cov_daily, rf=0.0, trading_periods=TRADING_DAYS):
     """
-    Given weights, mean daily returns, and daily covariance:
-    returns (annual_return, annual_volatility, sharpe)
+    Calculate annual portfolio return, volatility, and Sharpe ratio.
+    
+    Given portfolio weights, calculates key performance metrics:
+    - Annual return = weighted sum of asset returns
+    - Annual volatility = portfolio standard deviation
+    - Sharpe ratio = (return - risk_free_rate) / volatility
+    
+    Args:
+        weights: Portfolio allocation weights
+        mean_daily: Daily mean returns per asset
+        cov_daily: Daily covariance matrix
+        rf: Risk-free rate (annual)
+        trading_periods: Trading days/periods per year
+    
+    Returns:
+        Tuple: (annual_return, annual_volatility, sharpe_ratio)
     """
     weights = np.array(weights)
     mu = np.dot(weights, mean_daily) * trading_periods
@@ -97,19 +167,40 @@ def portfolio_performance(weights, mean_daily, cov_daily, rf=0.0, trading_period
 
 
 def simulate_portfolios(n, mean_daily, cov_daily, rf=0.0, allow_short=False, trading_periods=TRADING_DAYS):
+    """
+    Generate random portfolios for Monte Carlo visualization.
+    
+    Creates n random portfolio allocations and calculates their performance metrics.
+    This visualizes the "efficient frontier" and shows what portfolios are possible.
+    
+    Args:
+        n: Number of random portfolios to generate
+        mean_daily: Daily mean returns
+        cov_daily: Daily covariance matrix
+        rf: Risk-free rate
+        allow_short: If True, allow negative weights (short selling)
+        trading_periods: Trading periods per year
+    
+    Returns:
+        Tuple: (returns, volatilities, sharpe_ratios, weights)
+               Each has shape (n,) or (n, num_assets)
+    """
     dim = len(mean_daily)
     
     mean_daily = mean_daily.astype(np.float32)
     cov_daily = cov_daily.astype(np.float32)
     
     if allow_short:
+        # Allow positive and negative weights
         weights_list = np.random.normal(size=(n, dim)).astype(np.float32)
         sums = weights_list.sum(axis=1, keepdims=True)
         sums[np.abs(sums) < 1e-10] = 1.0
         weights_list = weights_list / sums
     else:
+        # Positive weights only (standard portfolio constraint)
         weights_list = np.random.dirichlet(np.ones(dim), size=n).astype(np.float32)
     
+    # Calculate returns and volatilities for all portfolios
     rets = (weights_list @ mean_daily) * trading_periods
     vars = np.einsum('ij,jk,ik->i', weights_list, cov_daily, weights_list) * trading_periods
     vols = np.sqrt(np.maximum(vars, 0))
@@ -120,13 +211,34 @@ def simulate_portfolios(n, mean_daily, cov_daily, rf=0.0, allow_short=False, tra
 
 @st.cache_data(ttl=3600)
 def chol_correlated_normals_sobol(n_steps, n_sims, mean_daily_tuple, cov_daily_tuple, seed=0):
+    """
+    Generate correlated random returns using Sobol low-discrepancy sequences.
+    
+    This function creates N simulated return paths with proper correlations
+    between assets using the Cholesky decomposition and quasi-random numbers.
+    
+    Uses Sobol sequences (more efficient than pure random) and caches results
+    for 1 hour to avoid redundant calculations.
+    
+    Args:
+        n_steps: Number of time steps per simulation
+        n_sims: Number of simulations
+        mean_daily_tuple: Daily mean returns (tuple for caching)
+        cov_daily_tuple: Daily covariance matrix (tuple for caching)
+        seed: Random seed for reproducibility
+    
+    Returns:
+        np.array: Shape (n_steps, n_sims, n_assets) - returns for all scenarios
+    """
     mean_daily = np.array(mean_daily_tuple, dtype=np.float32)
     cov_daily = np.array(cov_daily_tuple, dtype=np.float32)
     n_assets = len(mean_daily)
     
+    # Generate Sobol sequence (quasi-random, lower discrepancy than true random)
     sobol = qmc.Sobol(d=n_assets, scramble=True, seed=seed)
     n_samples = n_steps * n_sims
     
+    # Process in batches to manage memory
     batch_size = 100000
     shocks_list = []
     
@@ -134,16 +246,20 @@ def chol_correlated_normals_sobol(n_steps, n_sims, mean_daily_tuple, cov_daily_t
         batch_end = min(i + batch_size, n_samples)
         batch_samples = batch_end - i
         
+        # Convert uniform samples to standard normals
         uniform_samples = sobol.random(batch_samples)
         standard_normals = norm.ppf(uniform_samples).astype(np.float16)
         
+        # Cholesky decomposition for correlation
         if i == 0:
             L = np.linalg.cholesky(cov_daily).astype(np.float16)
         
+        # Apply correlation structure
         correlated_normals = standard_normals @ L.T
         shocks_batch = correlated_normals + mean_daily.astype(np.float16)
         shocks_list.append(shocks_batch)
     
+    # Reshape back to (time_steps, simulations, assets)
     shocks = np.vstack(shocks_list).astype(np.float32)
     shocks = shocks.reshape(n_steps, n_sims, n_assets)
     
@@ -151,24 +267,52 @@ def chol_correlated_normals_sobol(n_steps, n_sims, mean_daily_tuple, cov_daily_t
 
 
 def run_time_series_simulation(weights, mean_daily, cov_daily, time_horizon, n_sims, initial_investment):
+    """
+    Run Monte Carlo simulation of portfolio returns over time.
+    
+    Generates N possible future scenarios for the portfolio, tracking value
+    at each time step. Essential for risk analysis and distribution of outcomes.
+    
+    Args:
+        weights: Portfolio weights
+        mean_daily: Daily mean returns
+        cov_daily: Daily covariance
+        time_horizon: Number of periods to simulate
+        n_sims: Number of scenarios
+        initial_investment: Starting portfolio value
+    
+    Returns:
+        Tuple: (all_paths, final_values)
+               - all_paths: Shape (time_horizon, n_sims) - value at each timestep
+               - final_values: Shape (n_sims,) - final portfolio value
+    """
     weights = np.asarray(weights, dtype=np.float32)
     mean_daily_tuple = tuple(mean_daily.astype(np.float32).tolist())
     cov_daily_tuple = tuple(map(tuple, cov_daily.astype(np.float32).tolist()))
     
+    # Generate correlated returns
     shocks = chol_correlated_normals_sobol(time_horizon, n_sims, mean_daily_tuple, cov_daily_tuple)
     
+    # Apply weights to get portfolio returns
     port_ret = np.einsum('ijk,k->ij', shocks, weights)
     
+    # Compound returns: value = initial * exp(cumsum(log_returns))
     cum = np.exp(np.cumsum(port_ret, axis=0))
     
+    # Scale by initial investment
     all_paths = cum * np.float32(initial_investment)
-    
     final_values = all_paths[-1]
     
     return all_paths, final_values
 
 
 def optimize_min_variance(mean_daily, cov_daily, allow_short=False, trading_periods=TRADING_DAYS):
+    """
+    Find minimum variance portfolio weights.
+    
+    Minimizes portfolio volatility without any return constraint.
+    The safest/most conservative portfolio strategy.
+    """
     n = len(mean_daily)
     x0 = np.ones(n) / n
     bounds = None if allow_short else tuple((0.0, 1.0) for _ in range(n))
@@ -182,6 +326,12 @@ def optimize_min_variance(mean_daily, cov_daily, allow_short=False, trading_peri
 
 
 def optimize_max_sharpe(mean_daily, cov_daily, rf=0.0, allow_short=False, trading_periods=TRADING_DAYS):
+    """
+    Find maximum Sharpe ratio portfolio weights.
+    
+    Maximizes risk-adjusted returns: (return - rf) / volatility.
+    Often considered the optimal portfolio for most investors.
+    """
     n = len(mean_daily)
     x0 = np.ones(n) / n
     bounds = None if allow_short else tuple((0.0, 1.0) for _ in range(n))
